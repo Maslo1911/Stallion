@@ -37,7 +37,10 @@ router.get('/:id', async (req, res) => {
 // ─── POST /api/horses ─────────────────────────────────────────────────────────
 // Добавить лошадь
 // Body: { nickname, color, age, owner_id }
-router.post('/', async (req, res) => {
+const { authenticate, requireRole } = require('../middleware/auth');
+
+// Protect write operations (admin only)
+router.post('/', authenticate, requireRole('admin'), async (req, res) => {
     try {
         const { nickname, color, age, owner_id } = req.body;
 
@@ -55,7 +58,7 @@ router.post('/', async (req, res) => {
 // ─── PUT /api/horses/:id ──────────────────────────────────────────────────────
 // Обновить данные лошади
 // Body: { nickname?, color?, age?, owner_id? }
-router.put('/:id', async (req, res) => {
+router.put('/:id', authenticate, requireRole('admin'), async (req, res) => {
     try {
         const horse = await Horse.findByPk(req.params.id);
 
@@ -74,7 +77,7 @@ router.put('/:id', async (req, res) => {
 
 // ─── DELETE /api/horses/:id ───────────────────────────────────────────────────
 // Удалить лошадь по идентификатору
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authenticate, requireRole('admin'), async (req, res) => {
     try {
         const horse = await Horse.findByPk(req.params.id);
 

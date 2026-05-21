@@ -3,16 +3,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, ReactNode } from 'react';
-import { 
-  Trophy, 
-  Calendar, 
-  Users, 
-  Settings, 
-  Search, 
-  Plus, 
-  Clock, 
-  MapPin, 
+import React, { useState, useMemo, ReactNode, useEffect } from 'react';
+import {
+  Trophy,
+  Calendar,
+  Users,
+  Settings,
+  Search,
+  Plus,
+  Clock,
+  MapPin,
   ChevronRight,
   TrendingUp,
   Award,
@@ -26,52 +26,68 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { UserRole, Race, Horse, Jockey, Participation } from './types';
-import { mockRaces, mockHorses, mockJockeys, mockHippodromes, mockParticipations, mockOwners, mockUsers } from './mockData';
+import { UserRole, Race, Horse, User, Participation, Owner, Hippodrome } from './types';
 import { cn, formatCurrency } from './lib/utils';
+import { api } from './services/api';
+
+
 
 function LoginPage({ onLogin, onClose }: { onLogin: (role: UserRole) => void; onClose: () => void }) {
-  const [email, setEmail] = useState('');
+  const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(false);
-    
-    setTimeout(() => {
-      const user = mockUsers.find(u => u.email === email && u.password === password);
-      
+    try {
+      const { accessToken, refreshToken } = await api.login({ login, password });
+      localStorage.setItem('accessToken', accessToken);
+      localStorage.setItem('refreshToken', refreshToken);
+
+      const users: User[] = await api.getUsers();
+      const user = users.find(u => u.login === login);
       if (user) {
-        onLogin(user.role);
+        if (user.role_id === '2') {
+          onLogin('user');
+        } else if (user.role_id === '1') {
+          onLogin('admin');
+        } else {
+          console.log('User role unknown, defaulting to guest');
+          onLogin('guest');
+        }
       } else {
         setError(true);
       }
+    } catch (err) {
+      console.error('Login error', err);
+      setError(true);
+    } finally {
       setLoading(false);
-    }, 800);
+    }
   };
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
         className="absolute inset-0 bg-slate-950/60 backdrop-blur-md"
       />
-      
-      <motion.div 
+
+      <motion.div
         initial={{ opacity: 0, y: 20, scale: 0.95 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 20, scale: 0.95 }}
         className="w-full max-w-md z-10"
       >
         <div className="bg-white border border-slate-200 p-8 rounded-[2.5rem] shadow-2xl relative">
-          <button 
+          <button
             onClick={onClose}
             className="absolute right-6 top-6 p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400"
           >
@@ -92,11 +108,11 @@ function LoginPage({ onLogin, onClose }: { onLogin: (role: UserRole) => void; on
                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors">
                   <Mail className="w-5 h-5" />
                 </div>
-                <input 
-                  type="email" 
-                  placeholder="Email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                <input
+                  type="text"
+                  placeholder="Login"
+                  value={login}
+                  onChange={e => setLogin(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 focus:border-blue-600 rounded-2xl py-4 pl-12 pr-4 text-slate-900 placeholder:text-slate-400 outline-none transition-all focus:ring-4 focus:ring-blue-600/10 font-medium"
                   required
                 />
@@ -106,15 +122,15 @@ function LoginPage({ onLogin, onClose }: { onLogin: (role: UserRole) => void; on
                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors">
                   <Lock className="w-5 h-5" />
                 </div>
-                <input 
-                  type={showPassword ? "text" : "password"} 
+                <input
+                  type={showPassword ? "text" : "password"}
                   placeholder="Пароль"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 focus:border-blue-600 rounded-2xl py-4 pl-12 pr-12 text-slate-900 placeholder:text-slate-400 outline-none transition-all focus:ring-4 focus:ring-blue-600/10 font-medium"
                   required
                 />
-                <button 
+                <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
@@ -125,7 +141,7 @@ function LoginPage({ onLogin, onClose }: { onLogin: (role: UserRole) => void; on
             </div>
 
             {error && (
-              <motion.p 
+              <motion.p
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 className="text-xs text-rose-500 font-bold text-center"
@@ -134,7 +150,7 @@ function LoginPage({ onLogin, onClose }: { onLogin: (role: UserRole) => void; on
               </motion.p>
             )}
 
-            <button 
+            <button
               type="submit"
               disabled={loading}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-bold uppercase tracking-widest text-sm transition-all shadow-xl shadow-blue-600/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
@@ -158,83 +174,181 @@ function LoginPage({ onLogin, onClose }: { onLogin: (role: UserRole) => void; on
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [role, setRole] = useState<UserRole>('guest');
-  const [activeTab, setActiveTab] = useState<'races' | 'horses' | 'jockeys' | 'history' | 'admin' | 'analytics'>('races');
+  const [activeTab, setActiveTab] = useState<'races' | 'horses' | 'users' | 'history' | 'admin' | 'analytics'>('races');
   const [searchQuery, setSearchQuery] = useState('');
   const [dateFilter, setDateFilter] = useState('');
   const [selectedRace, setSelectedRace] = useState<Race | null>(null);
   const [selectedHorse, setSelectedHorse] = useState<Horse | null>(null);
-  const [selectedJockey, setSelectedJockey] = useState<Jockey | null>(null);
-  const [showModal, setShowModal] = useState<'race' | 'horse' | 'jockey' | 'hippodrome' | 'register' | 'login' | null>(null);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [showModal, setShowModal] = useState<'race' | 'horse' | 'user' | 'hippodrome' | 'register' | 'login' | null>(null);
+
+  // ─── Real Database States ──────────────────────────────────────────────────
+  const [races, setRaces] = useState<Race[]>([]);
+  const [horses, setHorses] = useState<Horse[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [hippodromes, setHippodromes] = useState<Hippodrome[]>([]);
+  const [owners, setOwners] = useState<Owner[]>([]);
+  const [participations, setParticipations] = useState<Participation[]>([]);
+  const [dbLoading, setDbLoading] = useState(true);
+
+  const loadAllData = async () => {
+    try {
+      setDbLoading(true);
+      const [racesData, horsesData, usersData, hippodromesData, ownersData, participationsData] = await Promise.all([
+        api.getRaces(),
+        api.getHorses(),
+        api.getUsers(),
+        api.getHippodromes(),
+        api.getOwners(),
+        api.getParticipations()
+      ]);
+      setRaces(racesData);
+      setHorses(horsesData);
+      setUsers(usersData);
+      setHippodromes(hippodromesData);
+      setOwners(ownersData);
+      setParticipations(participationsData);
+    } catch (err) {
+      console.error('Failed to load data from backend:', err);
+    } finally {
+      setDbLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAllData();
+  }, []);
+
+  const handleCreateRace = async (data: Omit<Race, 'id' | 'status'>) => {
+    try {
+      const newRace = await api.createRace(data);
+      setRaces(prev => [newRace, ...prev]);
+      setShowModal(null);
+    } catch (err: any) {
+      alert(`Ошибка при создании скачки: ${err.message}`);
+    }
+  };
+
+  const handleCreateHorse = async (data: Omit<Horse, 'id'>) => {
+    try {
+      const newHorse = await api.createHorse(data);
+      setHorses(prev => [newHorse, ...prev]);
+      setShowModal(null);
+    } catch (err: any) {
+      alert(`Ошибка при создании лошади: ${err.message}`);
+    }
+  };
+
+  const handleCreateUser = async (data: Omit<User, 'id'>) => {
+    try {
+      const newUser = await api.createUser(data);
+      setUsers(prev => [newUser, ...prev]);
+      setShowModal(null);
+    } catch (err: any) {
+      alert(`Ошибка при создании жокея: ${err.message}`);
+    }
+  };
+
+  const handleCreateHippodrome = async (data: Omit<Hippodrome, 'id'>) => {
+    try {
+      const newHippodrome = await api.createHippodrome(data);
+      setHippodromes(prev => [newHippodrome, ...prev]);
+      setShowModal(null);
+    } catch (err: any) {
+      alert(`Ошибка при создании ипподрома: ${err.message}`);
+    }
+  };
+
+  const handleRegisterParticipation = async (horseId: string) => {
+    if (!selectedRace) return;
+    try {
+      const newPart = await api.createParticipation({
+        race_id: selectedRace.id,
+        horse_id: horseId,
+        user_id: "1", // Фрэнки Деттори
+      });
+      setParticipations(prev => [...prev, newPart]);
+      setShowModal(null);
+    } catch (err: any) {
+      alert(`Ошибка при регистрации участия: ${err.message}`);
+    }
+  };
 
   const analytics = useMemo(() => {
     // 4. Horse with most prize places
     const horsePrizeCount: Record<string, number> = {};
-    mockParticipations.forEach(p => {
+    participations.forEach(p => {
       if (p.place && p.place <= 3) {
         horsePrizeCount[p.horse_id] = (horsePrizeCount[p.horse_id] || 0) + 1;
       }
     });
     const topHorseId = Object.entries(horsePrizeCount).sort((a, b) => b[1] - a[1])[0]?.[0];
-    const topHorse = mockHorses.find(h => h.id === topHorseId);
+    const topHorse = horses.find(h => h.id === topHorseId);
 
-    // 5. Jockey with most prize places
-    const jockeyPrizeCount: Record<string, number> = {};
-    mockParticipations.forEach(p => {
+    // 5. User with most prize places
+    const userPrizeCount: Record<string, number> = {};
+    participations.forEach(p => {
       if (p.place && p.place <= 3) {
-        jockeyPrizeCount[p.jockey_id] = (jockeyPrizeCount[p.jockey_id] || 0) + 1;
+        userPrizeCount[p.user_id] = (userPrizeCount[p.user_id] || 0) + 1;
       }
     });
-    const topJockeyId = Object.entries(jockeyPrizeCount).sort((a, b) => b[1] - a[1])[0]?.[0];
-    const topJockey = mockJockeys.find(j => j.id === topJockeyId);
+    const topUserId = Object.entries(userPrizeCount).sort((a, b) => b[1] - a[1])[0]?.[0];
+    const topUser = users.find(j => j.id === topUserId);
 
     // 6. Most frequent hippodrome
     const hippodromeCount: Record<string, number> = {};
-    mockRaces.forEach(r => {
+    races.forEach(r => {
       hippodromeCount[r.hippodrome_id] = (hippodromeCount[r.hippodrome_id] || 0) + 1;
     });
     const topHippodromeId = Object.entries(hippodromeCount).sort((a, b) => b[1] - a[1])[0]?.[0];
-    const topHippodrome = mockHippodromes.find(h => h.id === topHippodromeId);
+    const topHippodrome = hippodromes.find(h => h.id === topHippodromeId);
 
     // 1. Winners on a given date (using dateFilter)
-    const prizeWinnersOnDate = dateFilter ? mockParticipations.filter(p => {
-      const race = mockRaces.find(r => r.id === p.race_id);
+    const prizeWinnersOnDate = dateFilter ? participations.filter(p => {
+      const race = races.find(r => r.id === p.race_id);
       return race?.date === dateFilter && p.place && p.place <= 3;
     }).map(p => ({
-      horse: mockHorses.find(h => h.id === p.horse_id),
-      jockey: mockJockeys.find(j => j.id === p.jockey_id),
+      horse: horses.find(h => h.id === p.horse_id),
+      user: users.find(j => j.id === p.user_id),
       place: p.place
     })) : [];
 
-    return { topHorse, topJockey, topHippodrome, prizeWinnersOnDate };
-  }, [dateFilter]);
+    return { topHorse, topUser, topHippodrome, prizeWinnersOnDate };
+  }, [dateFilter, races, horses, users, hippodromes, participations]);
 
   const filteredRaces = useMemo(() => {
-    return mockRaces.filter(r => {
+    return races.filter(r => {
       const matchesSearch = r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        mockHippodromes.find(h => h.id === r.hippodrome_id)?.name.toLowerCase().includes(searchQuery.toLowerCase());
+        hippodromes.find(h => h.id === r.hippodrome_id)?.name.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesSearch;
     });
-  }, [searchQuery]);
+  }, [searchQuery, races, hippodromes]);
 
   const filteredHorses = useMemo(() => {
-    return mockHorses.filter(h => 
+    return horses.filter(h =>
       h.nickname.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      mockOwners.find(o => o.id === h.owner_id)?.full_name.toLowerCase().includes(searchQuery.toLowerCase())
+      owners.find(o => o.id === h.owner_id)?.full_name.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [searchQuery]);
+  }, [searchQuery, horses, owners]);
 
-  const filteredJockeys = useMemo(() => {
-    return mockJockeys.filter(j => 
+  const filteredUsers = useMemo(() => {
+    return users.filter(j =>
       j.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       j.license.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [searchQuery]);
+  }, [searchQuery, users]);
 
-  const stats = [
-    { label: 'Следующая скачка', value: '15:40', icon: Clock, color: 'text-blue-500' },
-    { label: 'Общий призовой фонд', value: formatCurrency(15000000), icon: TrendingUp, color: 'text-emerald-500' },
-    { label: 'Зарегистрировано лошадей', value: '1,240', icon: Award, color: 'text-amber-500' },
-  ];
+  const stats = useMemo(() => {
+    const totalPrize = races.reduce((sum, r) => sum + Number(r.prize || 0), 0);
+    const upcomingRaces = races.filter(r => r.status === 'upcoming');
+    const nextTime = upcomingRaces[0]?.time ? upcomingRaces[0].time.substring(0, 5) : '15:40';
+    return [
+      { label: 'Следующая скачка', value: nextTime, icon: Clock, color: 'text-blue-500' },
+      { label: 'Общий призовой фонд', value: formatCurrency(totalPrize || 15000000), icon: TrendingUp, color: 'text-emerald-500' },
+      { label: 'Зарегистрировано лошадей', value: String(horses.length || 0), icon: Award, color: 'text-amber-500' },
+    ];
+  }, [races, horses]);
+
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-600/10">
@@ -248,44 +362,44 @@ export default function App() {
         </div>
 
         <nav className="mt-4 px-4 space-y-2 flex-1 overflow-y-auto min-h-0 pb-8 custom-scrollbar">
-          <NavItem 
-            active={activeTab === 'races'} 
-            onClick={() => { setActiveTab('races'); setSelectedRace(null); }} 
-            icon={Calendar} 
-            label="Скачки" 
+          <NavItem
+            active={activeTab === 'races'}
+            onClick={() => { setActiveTab('races'); setSelectedRace(null); }}
+            icon={Calendar}
+            label="Скачки"
           />
-          <NavItem 
-            active={activeTab === 'horses'} 
-            onClick={() => { setActiveTab('horses'); setSelectedRace(null); }} 
-            icon={TrendingUp} 
-            label="Лошади" 
+          <NavItem
+            active={activeTab === 'horses'}
+            onClick={() => { setActiveTab('horses'); setSelectedRace(null); }}
+            icon={TrendingUp}
+            label="Лошади"
           />
-          <NavItem 
-            active={activeTab === 'jockeys'} 
-            onClick={() => { setActiveTab('jockeys'); setSelectedRace(null); }} 
-            icon={Users} 
-            label="Жокеи" 
+          <NavItem
+            active={activeTab === 'users'}
+            onClick={() => { setActiveTab('users'); setSelectedRace(null); }}
+            icon={Users}
+            label="Жокеи"
           />
-          <NavItem 
-            active={activeTab === 'analytics'} 
-            onClick={() => { setActiveTab('analytics'); setSelectedRace(null); setSelectedHorse(null); setSelectedJockey(null); }} 
-            icon={Filter} 
-            label="Аналитика" 
+          <NavItem
+            active={activeTab === 'analytics'}
+            onClick={() => { setActiveTab('analytics'); setSelectedRace(null); setSelectedHorse(null); setSelectedUser(null); }}
+            icon={Filter}
+            label="Аналитика"
           />
-          {role === 'jockey' && (
-            <NavItem 
-              active={activeTab === 'history'} 
-              onClick={() => { setActiveTab('history'); setSelectedRace(null); }} 
-              icon={Clock} 
-              label="Моя история" 
+          {role === 'user' && (
+            <NavItem
+              active={activeTab === 'history'}
+              onClick={() => { setActiveTab('history'); setSelectedRace(null); }}
+              icon={Clock}
+              label="Моя история"
             />
           )}
           {role === 'admin' && (
-            <NavItem 
-              active={activeTab === 'admin'} 
-              onClick={() => { setActiveTab('admin'); setSelectedRace(null); }} 
-              icon={Settings} 
-              label="Админ-панель" 
+            <NavItem
+              active={activeTab === 'admin'}
+              onClick={() => { setActiveTab('admin'); setSelectedRace(null); }}
+              icon={Settings}
+              label="Админ-панель"
             />
           )}
         </nav>
@@ -295,14 +409,14 @@ export default function App() {
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 hidden md:block">
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-xs font-bold text-white">
-                  {role === 'jockey' ? 'Ж' : 'А'}
+                  {role === 'user' ? 'Ж' : 'А'}
                 </div>
                 <div className="overflow-hidden">
-                  <p className="text-sm font-semibold text-slate-900 truncate capitalize">{role === 'jockey' ? 'жокей' : 'админ'}</p>
+                  <p className="text-sm font-semibold text-slate-900 truncate capitalize">{role === 'user' ? 'жокей' : 'админ'}</p>
                   <p className="text-xs text-slate-500 truncate">В сети</p>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={() => { setIsLoggedIn(false); setRole('guest'); setActiveTab('races'); }}
                 className="w-full py-2 bg-white border border-slate-200 hover:bg-slate-50 transition-colors rounded-lg text-xs font-medium flex items-center justify-center gap-2 text-slate-600"
               >
@@ -310,14 +424,14 @@ export default function App() {
               </button>
             </div>
           ) : (
-            <button 
+            <button
               onClick={() => setShowModal('login')}
               className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white transition-all rounded-xl text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 active:scale-95"
             >
               <UserIcon className="w-4 h-4" /> Войти в аккаунт
             </button>
           )}
-          
+
           {/* Role Switcher Demo Removed */}
         </div>
       </aside>
@@ -330,16 +444,16 @@ export default function App() {
             <h1 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight font-display">
               {activeTab === 'races' && (selectedRace ? 'Детали скачки' : 'Предстоящие скачки')}
               {activeTab === 'horses' && (selectedHorse ? 'Детали лошади' : 'Список лошадей')}
-              {activeTab === 'jockeys' && (selectedJockey ? 'Детали жокея' : 'Зарегистрированные жокеи')}
+              {activeTab === 'users' && (selectedUser ? 'Детали жокея' : 'Зарегистрированные жокеи')}
               {activeTab === 'history' && 'Карьерные достижения'}
               {activeTab === 'admin' && 'Управление системой'}
               {activeTab === 'analytics' && 'Аналитическая выборка'}
             </h1>
             <p className="text-slate-500 mt-1 text-sm font-medium">
-              {selectedRace ? `Просмотр ${selectedRace.name}` : 
-               selectedHorse ? `История скачек для ${selectedHorse.nickname}` :
-               selectedJockey ? `История скачек для ${selectedJockey.full_name}` :
-               ''}
+              {selectedRace ? `Просмотр ${selectedRace.name}` :
+                selectedHorse ? `История скачек для ${selectedHorse.nickname}` :
+                  selectedUser ? `История скачек для ${selectedUser.full_name}` :
+                    ''}
             </p>
           </div>
 
@@ -347,12 +461,12 @@ export default function App() {
             {activeTab !== 'analytics' && (
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   placeholder={
                     activeTab === 'races' ? 'Поиск скачек...' :
-                    activeTab === 'horses' ? 'Поиск лошадей...' :
-                    'Поиск жокеев...'
+                      activeTab === 'horses' ? 'Поиск лошадей...' :
+                        'Поиск жокеев...'
                   }
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -363,28 +477,28 @@ export default function App() {
             {activeTab === 'analytics' && (
               <div className="relative">
                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input 
-                  type="date" 
+                <input
+                  type="date"
                   value={dateFilter}
                   onChange={(e) => setDateFilter(e.target.value)}
                   className="bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-blue-600/20 transition-all text-sm shadow-sm"
                 />
               </div>
             )}
-            {role === 'admin' && (['races', 'horses', 'jockeys', 'admin'].includes(activeTab)) && (
-              <button 
+            {role === 'admin' && (['races', 'horses', 'users', 'admin'].includes(activeTab)) && (
+              <button
                 onClick={() => {
                   if (activeTab === 'races') setShowModal('race');
                   else if (activeTab === 'horses') setShowModal('horse');
-                  else if (activeTab === 'jockeys') setShowModal('jockey');
+                  else if (activeTab === 'users') setShowModal('user');
                   else setShowModal('race');
                 }}
                 className="hidden md:flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all active:scale-95 shadow-sm shadow-blue-600/10"
               >
                 <Plus className="w-4 h-4" /> {
                   activeTab === 'races' ? 'Создать скачку' :
-                  activeTab === 'horses' ? 'Новая лошадь' :
-                  activeTab === 'jockeys' ? 'Новый жокей' : 'Создать'
+                    activeTab === 'horses' ? 'Новая лошадь' :
+                      activeTab === 'users' ? 'Новый жокей' : 'Создать'
                 }
               </button>
             )}
@@ -395,7 +509,7 @@ export default function App() {
         {!selectedRace && activeTab === 'races' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
             {stats.map((stat, i) => (
-              <motion.div 
+              <motion.div
                 key={stat.label}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -422,7 +536,7 @@ export default function App() {
         {/* Content Tabs */}
         <AnimatePresence mode="wait">
           {activeTab === 'races' && (
-            <motion.section 
+            <motion.section
               key={selectedRace ? `race-${selectedRace.id}` : 'race-list'}
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
@@ -430,20 +544,25 @@ export default function App() {
               className="space-y-6"
             >
               {selectedRace ? (
-                <RaceDetailView 
-                  race={selectedRace} 
-                  onBack={() => setSelectedRace(null)} 
-                  role={role} 
+                <RaceDetailView
+                  race={selectedRace}
+                  onBack={() => setSelectedRace(null)}
+                  role={role}
                   onRegister={() => setShowModal('register')}
+                  participations={participations}
+                  horses={horses}
+                  users={users}
+                  owners={owners}
+                  hippodromes={hippodromes}
                 />
               ) : (
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                   {filteredRaces.map((race) => (
-                    <RaceListItem 
-                      key={race.id} 
-                      race={race} 
+                    <RaceListItem
+                      key={race.id}
+                      race={race}
                       onClick={() => setSelectedRace(race)}
-                      hippodrome={mockHippodromes.find(h => h.id === race.hippodrome_id)}
+                      hippodrome={hippodromes.find(h => h.id === race.hippodrome_id)}
                     />
                   ))}
                 </div>
@@ -452,7 +571,7 @@ export default function App() {
           )}
 
           {activeTab === 'horses' && (
-            <motion.section 
+            <motion.section
               key={selectedHorse ? `horse-${selectedHorse.id}` : 'horse-list'}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -460,18 +579,20 @@ export default function App() {
               className="space-y-6"
             >
               {selectedHorse ? (
-                <HistoryView 
-                  title={`История лошади: ${selectedHorse.nickname}`} 
-                  participations={mockParticipations.filter(p => p.horse_id === selectedHorse.id)}
+                <HistoryView
+                  title={`История лошади: ${selectedHorse.nickname}`}
+                  participations={participations.filter(p => p.horse_id === selectedHorse.id)}
                   onBack={() => setSelectedHorse(null)}
+                  races={races}
+                  hippodromes={hippodromes}
                 />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {filteredHorses.map(horse => (
-                    <HorseCard 
-                      key={horse.id} 
-                      horse={horse} 
-                      owner={mockOwners.find(o => o.id === horse.owner_id)} 
+                    <HorseCard
+                      key={horse.id}
+                      horse={horse}
+                      owner={owners.find(o => o.id === horse.owner_id)}
                       onClick={() => setSelectedHorse(horse)}
                     />
                   ))}
@@ -480,27 +601,29 @@ export default function App() {
             </motion.section>
           )}
 
-          {activeTab === 'jockeys' && (
-            <motion.section 
-              key={selectedJockey ? `jockey-${selectedJockey.id}` : 'jockey-list'}
+          {activeTab === 'users' && (
+            <motion.section
+              key={selectedUser ? `user-${selectedUser.id}` : 'user-list'}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="space-y-6"
             >
-              {selectedJockey ? (
-                <HistoryView 
-                  title={`История жокея: ${selectedJockey.full_name}`} 
-                  participations={mockParticipations.filter(p => p.jockey_id === selectedJockey.id)}
-                  onBack={() => setSelectedJockey(null)}
+              {selectedUser ? (
+                <HistoryView
+                  title={`История жокея: ${selectedUser.full_name}`}
+                  participations={participations.filter(p => p.user_id === selectedUser.id)}
+                  onBack={() => setSelectedUser(null)}
+                  races={races}
+                  hippodromes={hippodromes}
                 />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredJockeys.map(jockey => (
-                    <JockeyCard 
-                      key={jockey.id} 
-                      jockey={jockey} 
-                      onClick={() => setSelectedJockey(jockey)}
+                  {filteredUsers.map(user => (
+                    <UserCard
+                      key={user.id}
+                      user={user}
+                      onClick={() => setSelectedUser(user)}
                     />
                   ))}
                 </div>
@@ -509,7 +632,7 @@ export default function App() {
           )}
 
           {activeTab === 'analytics' && (
-            <motion.section 
+            <motion.section
               key="analytics"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -517,21 +640,21 @@ export default function App() {
               className="space-y-8"
             >
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <AnalyticsTopCard 
-                  label="Топ лошадь" 
-                  value={analytics.topHorse?.nickname || '-'} 
+                <AnalyticsTopCard
+                  label="Топ лошадь"
+                  value={analytics.topHorse?.nickname || '-'}
                   subtext="Больше всего призовых мест"
                   icon={Award}
                 />
-                <AnalyticsTopCard 
-                  label="Топ жокей" 
-                  value={analytics.topJockey?.full_name || '-'} 
+                <AnalyticsTopCard
+                  label="Топ жокей"
+                  value={analytics.topUser?.full_name || '-'}
                   subtext="Больше всего призовых мест"
                   icon={Users}
                 />
-                <AnalyticsTopCard 
-                  label="Популярный ипподром" 
-                  value={analytics.topHippodrome?.name || '-'} 
+                <AnalyticsTopCard
+                  label="Популярный ипподром"
+                  value={analytics.topHippodrome?.name || '-'}
                   subtext="Чаще всего проводятся скачки"
                   icon={MapPin}
                 />
@@ -539,10 +662,10 @@ export default function App() {
 
               <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
                 <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-                   <h3 className="text-lg font-bold text-slate-900 tracking-tight">Призеры на {dateFilter || 'выбранную дату'}</h3>
-                   <div className="text-xs text-slate-400 font-bold uppercase tracking-widest">
-                     {analytics.prizeWinnersOnDate.length} найдено
-                   </div>
+                  <h3 className="text-lg font-bold text-slate-900 tracking-tight">Призеры на {dateFilter || 'выбранную дату'}</h3>
+                  <div className="text-xs text-slate-400 font-bold uppercase tracking-widest">
+                    {analytics.prizeWinnersOnDate.length} найдено
+                  </div>
                 </div>
                 <div className="divide-y divide-slate-100">
                   {analytics.prizeWinnersOnDate.length > 0 ? (
@@ -552,14 +675,14 @@ export default function App() {
                           <div className={cn(
                             "w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm",
                             winner.place === 1 ? "bg-amber-100 text-amber-700" :
-                            winner.place === 2 ? "bg-slate-200 text-slate-700" :
-                            "bg-orange-100 text-orange-800"
+                              winner.place === 2 ? "bg-slate-200 text-slate-700" :
+                                "bg-orange-100 text-orange-800"
                           )}>
                             {winner.place}
                           </div>
                           <div>
                             <p className="text-sm font-bold text-slate-900">{winner.horse?.nickname}</p>
-                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Жокей: {winner.jockey?.full_name}</p>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Жокей: {winner.user?.full_name}</p>
                           </div>
                         </div>
                       </div>
@@ -575,7 +698,7 @@ export default function App() {
           )}
 
           {activeTab === 'history' && (
-            <motion.section 
+            <motion.section
               key="history"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -584,38 +707,51 @@ export default function App() {
             >
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Всего побед</p>
-                  <p className="text-3xl font-bold text-slate-900">42</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Всего скачек</p>
+                  <p className="text-3xl font-bold text-slate-900">{participations.filter(p => p.user_id === '1').length}</p>
                 </div>
                 <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Процент побед</p>
-                  <p className="text-3xl font-bold text-emerald-600">18.4%</p>
+                  <p className="text-3xl font-bold text-emerald-600">
+                    {Math.round((participations.filter(p => p.user_id === '1' && p.place === 1).length /
+                      (participations.filter(p => p.user_id === '1').length || 1)) * 100)}%
+                  </p>
                 </div>
                 <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Подиумы</p>
-                  <p className="text-3xl font-bold text-slate-900">108</p>
+                  <p className="text-3xl font-bold text-slate-900">{participations.filter(p => p.user_id === '1' && p.place && p.place <= 3).length}</p>
                 </div>
                 <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Доход</p>
-                  <p className="text-3xl font-bold text-blue-600">{formatCurrency(2450000)}</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Доход жокея</p>
+                  <p className="text-3xl font-bold text-blue-600">
+                    {formatCurrency(
+                      participations
+                        .filter(p => p.user_id === '1' && p.place)
+                        .reduce((sum, p) => {
+                          const race = races.find(r => r.id === p.race_id);
+                          const share = p.place === 1 ? 0.1 : 0.05;
+                          return sum + (Number(race?.prize || 0) * share);
+                        }, 0)
+                    )}
+                  </p>
                 </div>
               </div>
 
               <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
                 <div className="p-6 border-b border-slate-100 bg-slate-50">
-                   <h3 className="text-lg font-bold text-slate-900 tracking-tight">Последние результаты</h3>
+                  <h3 className="text-lg font-bold text-slate-900 tracking-tight">Последние результаты</h3>
                 </div>
                 <div className="divide-y divide-slate-100">
-                  {mockParticipations.filter(p => p.jockey_id === 'j1' && p.place).map(p => {
-                    const race = mockRaces.find(r => r.id === p.race_id);
-                    const horse = mockHorses.find(h => h.id === p.horse_id);
+                  {participations.filter(p => p.user_id === '1' && p.place).map(p => {
+                    const race = races.find(r => r.id === p.race_id);
+                    const horse = horses.find(h => h.id === p.horse_id);
                     return (
                       <div key={p.id} className="p-6 flex items-center justify-between hover:bg-slate-50 transition-colors">
                         <div className="flex items-center gap-6">
                           <div className={cn(
                             "w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg shadow-sm border",
-                            p.place === 1 ? "bg-amber-50 text-amber-700 border-amber-200" : 
-                            p.place === 2 ? "bg-slate-100 text-slate-700 border-slate-200" : "bg-orange-50 text-orange-700 border-orange-200"
+                            p.place === 1 ? "bg-amber-50 text-amber-700 border-amber-200" :
+                              p.place === 2 ? "bg-slate-100 text-slate-700 border-slate-200" : "bg-orange-50 text-orange-700 border-orange-200"
                           )}>
                             {p.place}
                           </div>
@@ -625,7 +761,7 @@ export default function App() {
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="text-sm font-bold text-slate-900">+{formatCurrency((race?.prize || 0) * (p.place === 1 ? 0.1 : 0.05))}</p>
+                          <p className="text-sm font-bold text-slate-900">+{formatCurrency((Number(race?.prize || 0)) * (p.place === 1 ? 0.1 : 0.05))}</p>
                           <p className="text-[10px] text-slate-400 uppercase font-bold">Доля жокея</p>
                         </div>
                       </div>
@@ -637,7 +773,7 @@ export default function App() {
           )}
 
           {activeTab === 'admin' && (
-             <motion.section 
+            <motion.section
               key="admin"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -647,12 +783,19 @@ export default function App() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <AdminCard title="Недавняя активность" description="Отслеживание изменений в системе">
                   <div className="space-y-4">
-                    {[1, 2, 3].map(i => (
-                      <div key={i} className="flex items-center gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                        <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600"><Plus className="w-5 h-5"/></div>
+                    <div className="flex items-center gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600"><Plus className="w-5 h-5" /></div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">База данных успешно подключена</p>
+                        <p className="text-xs text-slate-500 font-medium">Только что • PostgreSQL</p>
+                      </div>
+                    </div>
+                    {races.slice(0, 2).map(r => (
+                      <div key={r.id} className="flex items-center gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600"><Plus className="w-5 h-5" /></div>
                         <div>
-                          <p className="text-sm font-semibold text-slate-900">Скачка "Весеннее дерби" создана</p>
-                          <p className="text-xs text-slate-500 font-medium">2 часа назад от Системы</p>
+                          <p className="text-sm font-semibold text-slate-900">Скачка "{r.name}" в списке</p>
+                          <p className="text-xs text-slate-500 font-medium">{r.date} в {r.time}</p>
                         </div>
                       </div>
                     ))}
@@ -662,52 +805,62 @@ export default function App() {
                   <div className="grid grid-cols-2 gap-4">
                     <ActionButton icon={Plus} label="Новая скачка" onClick={() => setShowModal('race')} />
                     <ActionButton icon={Plus} label="Новая лошадь" onClick={() => setShowModal('horse')} />
-                    <ActionButton icon={Plus} label="Новый жокей" onClick={() => setShowModal('jockey')} />
+                    <ActionButton icon={Plus} label="Новый жокей" onClick={() => setShowModal('user')} />
                     <ActionButton icon={Plus} label="Новый ипподром" onClick={() => setShowModal('hippodrome')} />
                   </div>
                 </AdminCard>
                 <AdminCard title="Владельцы и лошади" description="Управление составом владельцев">
-                   <div className="space-y-4">
-                     {mockOwners.map(owner => (
-                       <div key={owner.id} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
-                         <div className="flex items-center justify-between mb-4">
-                           <div>
-                             <p className="text-sm font-bold text-slate-900">{owner.full_name}</p>
-                             <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest">{owner.address}</p>
-                           </div>
-                           <button onClick={() => setShowModal('horse')} className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                             <Plus className="w-4 h-4" />
-                           </button>
-                         </div>
-                         <div className="space-y-2">
-                           {mockHorses.filter(h => h.owner_id === owner.id).map(horse => (
-                             <div key={horse.id} className="flex items-center justify-between text-xs p-2 bg-white rounded-lg border border-slate-200">
-                               <span className="font-semibold text-slate-700">{horse.nickname} ({horse.color})</span>
-                               <button className="text-rose-500 hover:text-rose-700 font-bold uppercase text-[8px] tracking-widest">Удалить</button>
-                             </div>
-                           ))}
-                         </div>
-                       </div>
-                     ))}
-                   </div>
-                </AdminCard>
-                 <AdminCard title="Управление жокеями" description="Лицензии и допуски">
-                    <div className="space-y-4">
-                      {mockJockeys.map(j => (
-                        <div key={j.id} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-between">
+                  <div className="space-y-4">
+                    {owners.map(owner => (
+                      <div key={owner.id} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+                        <div className="flex items-center justify-between mb-4">
                           <div>
-                            <p className="text-sm font-bold text-slate-900">{j.full_name}</p>
-                            <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest">Лицензия: {j.license}</p>
+                            <p className="text-sm font-bold text-slate-900">{owner.full_name}</p>
+                            <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest">{owner.address}</p>
                           </div>
-                          <div className="flex gap-2">
-                             <button className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-bold uppercase hover:bg-slate-100 transition-colors">Продлить</button>
-                             <button className="px-3 py-1 bg-rose-50 text-rose-600 border border-rose-100 rounded-lg text-[10px] font-bold uppercase hover:bg-rose-100 transition-colors">Отстранить</button>
-                          </div>
+                          <button onClick={() => setShowModal('horse')} className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                            <Plus className="w-4 h-4" />
+                          </button>
                         </div>
-                      ))}
-                    </div>
-                 </AdminCard>
-                 <AdminCard title="Статистика призов" description="Финансовая аналитика">
+                        <div className="space-y-2">
+                          {horses.filter(h => h.owner_id === owner.id).map(horse => (
+                            <div key={horse.id} className="flex items-center justify-between text-xs p-2 bg-white rounded-lg border border-slate-200">
+                              <span className="font-semibold text-slate-700">{horse.nickname} ({horse.color})</span>
+                              <button
+                                onClick={async () => {
+                                  if (confirm(`Удалить лошадь ${horse.nickname}?`)) {
+                                    await api.deleteHorse(horse.id);
+                                    setHorses(prev => prev.filter(h => h.id !== horse.id));
+                                  }
+                                }}
+                                className="text-rose-500 hover:text-rose-700 font-bold uppercase text-[8px] tracking-widest"
+                              >
+                                Удалить
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </AdminCard>
+                <AdminCard title="Управление жокеями" description="Лицензии и допуски">
+                  <div className="space-y-4">
+                    {users.map(j => (
+                      <div key={j.id} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-bold text-slate-900">{j.full_name}</p>
+                          <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest">Лицензия: {j.license}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-bold uppercase hover:bg-slate-100 transition-colors">Продлить</button>
+                          <button className="px-3 py-1 bg-rose-50 text-rose-600 border border-rose-100 rounded-lg text-[10px] font-bold uppercase hover:bg-rose-100 transition-colors">Отстранить</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </AdminCard>
+                <AdminCard title="Статистика призов" description="Финансовая аналитика">
                   <div className="space-y-4">
                     <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl">
                       <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-1">Выплачено призов</p>
@@ -715,12 +868,12 @@ export default function App() {
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="p-4 bg-white border border-slate-200 rounded-2xl">
-                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Комиссия трека</p>
-                         <p className="text-lg font-bold text-slate-900">{formatCurrency(1250000)}</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Комиссия трека</p>
+                        <p className="text-lg font-bold text-slate-900">{formatCurrency(1250000)}</p>
                       </div>
                       <div className="p-4 bg-white border border-slate-200 rounded-2xl">
-                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Удержание налога</p>
-                         <p className="text-lg font-bold text-slate-900">13%</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Удержание налога</p>
+                        <p className="text-lg font-bold text-slate-900">13%</p>
                       </div>
                     </div>
                   </div>
@@ -742,22 +895,22 @@ export default function App() {
           {showModal && (
             <Modal onClose={() => setShowModal(null)}>
               {showModal === 'login' && (
-                <LoginPage 
-                  onLogin={(selectedRole) => { 
-                    setRole(selectedRole); 
-                    setIsLoggedIn(true); 
-                    setShowModal(null); 
+                <LoginPage
+                  onLogin={(selectedRole) => {
+                    setRole(selectedRole);
+                    setIsLoggedIn(true);
+                    setShowModal(null);
                     if (selectedRole === 'admin') setActiveTab('admin');
-                    else if (selectedRole === 'jockey') setActiveTab('history');
-                  }} 
-                  onClose={() => setShowModal(null)} 
+                    else if (selectedRole === 'user') setActiveTab('history');
+                  }}
+                  onClose={() => setShowModal(null)}
                 />
               )}
-              {showModal === 'race' && <RaceForm onClose={() => setShowModal(null)} />}
-              {showModal === 'horse' && <HorseForm onClose={() => setShowModal(null)} />}
-              {showModal === 'jockey' && <JockeyForm onClose={() => setShowModal(null)} />}
-              {showModal === 'hippodrome' && <HippodromeForm onClose={() => setShowModal(null)} />}
-              {showModal === 'register' && <RegisterEntryForm race={selectedRace!} onClose={() => setShowModal(null)} />}
+              {showModal === 'race' && <RaceForm onClose={() => setShowModal(null)} hippodromes={hippodromes} onSubmit={handleCreateRace} />}
+              {showModal === 'horse' && <HorseForm onClose={() => setShowModal(null)} owners={owners} onSubmit={handleCreateHorse} />}
+              {showModal === 'user' && <UserForm onClose={() => setShowModal(null)} onSubmit={handleCreateUser} />}
+              {showModal === 'hippodrome' && <HippodromeForm onClose={() => setShowModal(null)} onSubmit={handleCreateHippodrome} />}
+              {showModal === 'register' && <RegisterEntryForm race={selectedRace!} horses={horses} onClose={() => setShowModal(null)} onSubmit={handleRegisterParticipation} />}
             </Modal>
           )}
         </AnimatePresence>
@@ -768,7 +921,7 @@ export default function App() {
 
 function NavItem({ active, onClick, icon: Icon, label }: { active: boolean; onClick: () => void; icon: any; label: string }) {
   return (
-    <button 
+    <button
       onClick={onClick}
       className={cn(
         "w-full flex items-center gap-3 p-2.5 rounded-lg transition-all group font-medium",
@@ -789,14 +942,14 @@ function RaceListItem({ race, hippodrome, onClick }: { race: Race; hippodrome?: 
   }[race.status];
 
   return (
-    <div 
+    <div
       onClick={onClick}
       className="bg-white border border-slate-200 p-6 rounded-2xl group hover:border-blue-600 transition-all cursor-pointer relative overflow-hidden shadow-sm hover:shadow-md"
     >
       <div className="flex items-start justify-between relative z-10">
         <div className="space-y-4">
           <div className="flex items-center gap-3">
-             <span className={cn("px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border", statusColor)}>
+            <span className={cn("px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border", statusColor)}>
               {race.status === 'upcoming' ? 'ожидается' : race.status === 'ongoing' ? 'идет' : 'завершено'}
             </span>
             <span className="text-slate-400 text-xs flex items-center gap-1">
@@ -806,7 +959,7 @@ function RaceListItem({ race, hippodrome, onClick }: { race: Race; hippodrome?: 
               <Clock className="w-3.5 h-3.5" /> {race.time}
             </span>
           </div>
-          
+
           <div>
             <h3 className="text-xl font-bold text-slate-900 group-hover:text-blue-600 transition-colors tracking-tight font-display">{race.name}</h3>
             <p className="text-sm text-slate-500 flex items-center gap-1 mt-0.5 font-medium">
@@ -835,8 +988,8 @@ function RaceListItem({ race, hippodrome, onClick }: { race: Race; hippodrome?: 
   );
 }
 
-function RaceDetailView({ race, onBack, role, onRegister }: { race: Race; onBack: () => void; role: UserRole; onRegister?: () => void }) {
-  const participations = mockParticipations.filter(p => p.race_id === race.id);
+function RaceDetailView({ race, onBack, role, onRegister, participations: allParticipations, horses, users, owners, hippodromes }: { race: Race; onBack: () => void; role: UserRole; onRegister?: () => void; participations: Participation[]; horses: Horse[]; users: User[]; owners: Owner[]; hippodromes: Hippodrome[] }) {
+  const participations = allParticipations.filter(p => p.race_id === race.id);
 
   return (
     <div className="space-y-8 pb-10">
@@ -849,22 +1002,22 @@ function RaceDetailView({ race, onBack, role, onRegister }: { race: Race; onBack
         <div className="lg:col-span-12 space-y-8">
           <div className="p-8 bg-white rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
             <div className="relative z-10 space-y-6">
-               <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3">
                 <span className="bg-blue-600 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">Главное событие</span>
                 <span className="text-slate-500 text-sm font-medium">{race.date} • {race.time}</span>
               </div>
               <h2 className="text-4xl md:text-5xl font-bold text-slate-900 tracking-tight font-display">{race.name}</h2>
               <div className="flex flex-wrap items-center gap-10">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center shadow-sm border border-blue-100"><MapPin className="w-6 h-6 text-blue-600"/></div>
+                  <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center shadow-sm border border-blue-100"><MapPin className="w-6 h-6 text-blue-600" /></div>
                   <div>
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Местоположение</p>
-                    <p className="text-lg text-slate-900 font-bold leading-tight">{mockHippodromes.find(h => h.id === race.hippodrome_id)?.name}</p>
-                    <p className="text-[10px] text-slate-500 font-medium mt-0.5">{mockHippodromes.find(h => h.id === race.hippodrome_id)?.address}</p>
+                    <p className="text-lg text-slate-900 font-bold leading-tight">{hippodromes.find(h => h.id === race.hippodrome_id)?.name}</p>
+                    <p className="text-[10px] text-slate-500 font-medium mt-0.5">{hippodromes.find(h => h.id === race.hippodrome_id)?.address}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center shadow-sm border border-emerald-100"><TrendingUp className="w-6 h-6 text-emerald-600"/></div>
+                  <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center shadow-sm border border-emerald-100"><TrendingUp className="w-6 h-6 text-emerald-600" /></div>
                   <div>
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Приз</p>
                     <p className="text-lg text-slate-900 font-bold">{formatCurrency(race.prize)}</p>
@@ -876,10 +1029,10 @@ function RaceDetailView({ race, onBack, role, onRegister }: { race: Race; onBack
           </div>
 
           <div className="space-y-4">
-             <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold text-slate-900">Подтвержденные участники</h3>
-              {role === 'jockey' && race.status === 'upcoming' && (
-                <button 
+              {role === 'user' && race.status === 'upcoming' && (
+                <button
                   onClick={() => onRegister?.()}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl text-sm font-bold transition-all shadow-sm"
                 >
@@ -887,7 +1040,7 @@ function RaceDetailView({ race, onBack, role, onRegister }: { race: Race; onBack
                 </button>
               )}
               {role === 'admin' && (
-                <button 
+                <button
                   onClick={() => alert('Режим редактирования активирован (демо)')}
                   className="bg-amber-600 hover:bg-amber-700 text-white px-5 py-2 rounded-xl text-sm font-bold transition-all shadow-sm"
                 >
@@ -895,7 +1048,7 @@ function RaceDetailView({ race, onBack, role, onRegister }: { race: Race; onBack
                 </button>
               )}
             </div>
-            
+
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
               <table className="w-full text-left border-collapse">
                 <thead>
@@ -910,34 +1063,34 @@ function RaceDetailView({ race, onBack, role, onRegister }: { race: Race; onBack
                   {participations
                     .sort((a, b) => (a.place || 99) - (b.place || 99))
                     .map((p, idx) => {
-                    const horse = mockHorses.find(h => h.id === p.horse_id);
-                    const jockey = mockJockeys.find(j => j.id === p.jockey_id);
-                    const owner = mockOwners.find(o => o.id === horse?.owner_id);
-                    const isPodium = p.place && p.place <= 3;
-                    
-                    return (
-                      <tr key={p.id} className="hover:bg-slate-50/50 transition-colors group">
-                        {race.status === 'finished' && (
+                      const horse = horses.find(h => h.id === p.horse_id);
+                      const user = users.find(j => j.id === p.user_id);
+                      const owner = owners.find(o => o.id === horse?.owner_id);
+                      const isPodium = p.place && p.place <= 3;
+
+                      return (
+                        <tr key={p.id} className="hover:bg-slate-50/50 transition-colors group">
+                          {race.status === 'finished' && (
+                            <td className="p-4">
+                              <div className={cn(
+                                "w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm",
+                                p.place === 1 ? "bg-amber-100 text-amber-700" :
+                                  p.place === 2 ? "bg-slate-200 text-slate-700" :
+                                    p.place === 3 ? "bg-orange-100 text-orange-800" : "bg-slate-50 text-slate-400"
+                              )}>
+                                {p.place || '-'}
+                              </div>
+                            </td>
+                          )}
                           <td className="p-4">
-                            <div className={cn(
-                              "w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm",
-                              p.place === 1 ? "bg-amber-100 text-amber-700" :
-                              p.place === 2 ? "bg-slate-200 text-slate-700" :
-                              p.place === 3 ? "bg-orange-100 text-orange-800" : "bg-slate-50 text-slate-400"
-                            )}>
-                              {p.place || '-'}
-                            </div>
+                            <p className="text-sm font-bold text-slate-900">{horse?.nickname}</p>
+                            <p className="text-[10px] text-slate-500 font-medium">{horse?.color} • {horse?.age}л</p>
                           </td>
-                        )}
-                        <td className="p-4">
-                          <p className="text-sm font-bold text-slate-900">{horse?.nickname}</p>
-                          <p className="text-[10px] text-slate-500 font-medium">{horse?.color} • {horse?.age}л</p>
-                        </td>
-                        <td className="p-4 text-sm text-slate-600 font-medium">{jockey?.full_name}</td>
-                        <td className="p-4 text-sm text-slate-500 text-right">{owner?.full_name}</td>
-                      </tr>
-                    )
-                  })}
+                          <td className="p-4 text-sm text-slate-600 font-medium">{user?.full_name}</td>
+                          <td className="p-4 text-sm text-slate-500 text-right">{owner?.full_name}</td>
+                        </tr>
+                      )
+                    })}
                 </tbody>
               </table>
             </div>
@@ -950,7 +1103,7 @@ function RaceDetailView({ race, onBack, role, onRegister }: { race: Race; onBack
 
 function HorseCard({ horse, owner, onClick }: { horse: Horse; owner?: any; onClick?: () => void; key?: string | number }) {
   return (
-    <div 
+    <div
       onClick={onClick}
       className={cn(
         "p-6 bg-white border border-slate-200 rounded-2xl group transition-all shadow-sm shadow-slate-200/50",
@@ -969,8 +1122,8 @@ function HorseCard({ horse, owner, onClick }: { horse: Horse; owner?: any; onCli
       </div>
       <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
         <div>
-           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Владелец</p>
-           <p className="text-sm font-semibold text-slate-800">{owner?.full_name}</p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Владелец</p>
+          <p className="text-sm font-semibold text-slate-800">{owner?.full_name}</p>
         </div>
         <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all text-slate-400">
           <ChevronRight className="w-4 h-4" />
@@ -980,9 +1133,9 @@ function HorseCard({ horse, owner, onClick }: { horse: Horse; owner?: any; onCli
   );
 }
 
-function JockeyCard({ jockey, onClick }: { jockey: Jockey; onClick?: () => void; key?: string | number }) {
+function UserCard({ user, onClick }: { user: User; onClick?: () => void; key?: string | number }) {
   return (
-    <div 
+    <div
       onClick={onClick}
       className={cn(
         "p-6 bg-white border border-slate-200 rounded-2xl group transition-all shadow-sm",
@@ -994,28 +1147,28 @@ function JockeyCard({ jockey, onClick }: { jockey: Jockey; onClick?: () => void;
           🧢
         </div>
         <div>
-          <h3 className="text-lg font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{jockey.full_name}</h3>
+          <h3 className="text-lg font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{user.full_name}</h3>
           <p className="text-xs text-slate-500 font-medium">Элитный профессионал</p>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100">
         <div>
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Возраст</p>
-          <p className="text-sm font-bold text-slate-900">{jockey.age}</p>
+          <p className="text-sm font-bold text-slate-900">{user.age}</p>
         </div>
         <div>
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Лицензия</p>
-          <p className="text-sm font-bold text-slate-900">{jockey.license}</p>
+          <p className="text-sm font-bold text-slate-900">{user.license}</p>
         </div>
       </div>
-       <button className="w-full mt-6 py-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-xs font-bold uppercase tracking-widest text-slate-600 transition-all border border-slate-200 shadow-xs">
+      <button className="w-full mt-6 py-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-xs font-bold uppercase tracking-widest text-slate-600 transition-all border border-slate-200 shadow-xs">
         Статистика карьеры
       </button>
     </div>
   );
 }
 
-function HistoryView({ title, participations, onBack }: { title: string; participations: Participation[]; onBack: () => void }) {
+function HistoryView({ title, participations, onBack, races, hippodromes }: { title: string; participations: Participation[]; onBack: () => void; races: Race[]; hippodromes: Hippodrome[] }) {
   return (
     <div className="space-y-6">
       <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-blue-600 transition-colors text-sm font-bold uppercase tracking-widest">
@@ -1023,17 +1176,17 @@ function HistoryView({ title, participations, onBack }: { title: string; partici
       </button>
       <div className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
         <div className="p-6 border-b border-slate-100 bg-slate-50">
-           <h3 className="text-xl font-bold text-slate-900 tracking-tight">{title}</h3>
+          <h3 className="text-xl font-bold text-slate-900 tracking-tight">{title}</h3>
         </div>
         <div className="divide-y divide-slate-100">
           {participations.length > 0 ? (
             participations.map((p) => {
-              const race = mockRaces.find(r => r.id === p.race_id);
+              const race = races.find(r => r.id === p.race_id);
               return (
                 <div key={p.id} className="p-6 flex items-center justify-between hover:bg-slate-50 transition-colors">
                   <div>
                     <p className="text-lg font-bold text-slate-900 tracking-tight">{race?.name}</p>
-                    <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">{race?.date} • {mockHippodromes.find(h => h.id === race?.hippodrome_id)?.name}</p>
+                    <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">{race?.date} • {hippodromes.find(h => h.id === race?.hippodrome_id)?.name}</p>
                   </div>
                   <div className="text-right">
                     <p className={cn(
@@ -1090,7 +1243,7 @@ function AdminCard({ title, description, children }: { title: string; descriptio
 
 function ActionButton({ icon: Icon, label, onClick }: { icon: any; label: string; onClick?: () => void }) {
   return (
-    <button 
+    <button
       onClick={onClick}
       className="flex flex-col items-center justify-center gap-2 p-4 bg-slate-50 hover:bg-white rounded-xl border border-slate-200 group transition-all active:scale-95 shadow-xs hover:shadow-sm w-full"
     >
@@ -1105,14 +1258,14 @@ function ActionButton({ icon: Icon, label, onClick }: { icon: any; label: string
 function Modal({ children, onClose }: { children: ReactNode; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
         className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm"
       />
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -1138,36 +1291,61 @@ function FormLayout({ title, children, onClose }: { title: string; children: Rea
   );
 }
 
-function InputField({ label, type = "text", placeholder, required = true }: { label: string; type?: string; placeholder?: string; required?: boolean }) {
+function InputField({ label, type = "text", placeholder, required = true, value, onChange }: { label: string; type?: string; placeholder?: string; required?: boolean; value?: string | number; onChange?: (e: any) => void }) {
   return (
     <div className="space-y-1.5">
       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">{label}</label>
-      <input 
-        type={type} 
+      <input
+        type={type}
         placeholder={placeholder}
         required={required}
+        value={value}
+        onChange={onChange}
         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all font-medium"
       />
     </div>
   );
 }
 
-function RaceForm({ onClose }: { onClose: () => void }) {
+function RaceForm({ onClose, hippodromes, onSubmit }: { onClose: () => void; hippodromes: Hippodrome[]; onSubmit: (data: any) => Promise<void> }) {
+  const [name, setName] = useState('');
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('');
+  const [hippodromeId, setHippodromeId] = useState(hippodromes[0]?.id || '');
+  const [prize, setPrize] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await onSubmit({
+      name,
+      date,
+      time,
+      hippodrome_id: hippodromeId,
+      prize: Number(prize)
+    });
+    onClose();
+  };
+
   return (
     <FormLayout title="Создать скачку" onClose={onClose}>
-      <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); onClose(); }}>
-        <InputField label="Название скачки" placeholder="Напр. Кубок Президента" />
+      <form className="space-y-6" onSubmit={handleSubmit}>
+        <InputField label="Название скачки" placeholder="Напр. Кубок Президента" value={name} onChange={e => setName(e.target.value)} />
         <div className="grid grid-cols-2 gap-4">
-          <InputField label="Дата" type="date" />
-          <InputField label="Время" type="time" />
+          <InputField label="Дата" type="date" value={date} onChange={e => setDate(e.target.value)} />
+          <InputField label="Время" type="time" value={time} onChange={e => setTime(e.target.value)} />
         </div>
         <div className="space-y-1.5">
           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Ипподром</label>
-          <select required className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium">
-            {mockHippodromes.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+          <select
+            required
+            value={hippodromeId}
+            onChange={e => setHippodromeId(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium"
+          >
+            {hippodromes.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
           </select>
         </div>
-        <InputField label="Приз ($)" type="number" placeholder="50000" />
+        <InputField label="Приз ($)" type="number" placeholder="50000" value={prize} onChange={e => setPrize(e.target.value)} />
         <button className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold uppercase tracking-widest text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 active:scale-95 mt-4">
           Сохранить скачку
         </button>
@@ -1176,19 +1354,40 @@ function RaceForm({ onClose }: { onClose: () => void }) {
   );
 }
 
-function HorseForm({ onClose }: { onClose: () => void }) {
+function HorseForm({ onClose, owners, onSubmit }: { onClose: () => void; owners: Owner[]; onSubmit: (data: any) => Promise<void> }) {
+  const [nickname, setNickname] = useState('');
+  const [color, setColor] = useState('');
+  const [age, setAge] = useState('');
+  const [ownerId, setOwnerId] = useState(owners[0]?.id || '');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await onSubmit({
+      nickname,
+      color,
+      age: Number(age),
+      owner_id: ownerId
+    });
+    onClose();
+  };
+
   return (
     <FormLayout title="Новая лошадь" onClose={onClose}>
-      <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); onClose(); }}>
-        <InputField label="Кличка лошади" placeholder="Напр. Вихрь" />
+      <form className="space-y-6" onSubmit={handleSubmit}>
+        <InputField label="Кличка лошади" placeholder="Напр. Вихрь" value={nickname} onChange={e => setNickname(e.target.value)} />
         <div className="grid grid-cols-2 gap-4">
-          <InputField label="Окрас" placeholder="Гнедая" />
-          <InputField label="Возраст" type="number" placeholder="4" />
+          <InputField label="Окрас" placeholder="Гнедая" value={color} onChange={e => setColor(e.target.value)} />
+          <InputField label="Возраст" type="number" placeholder="4" value={age} onChange={e => setAge(e.target.value)} />
         </div>
         <div className="space-y-1.5">
           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Владелец</label>
-          <select required className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium">
-            {mockOwners.map(o => <option key={o.id} value={o.id}>{o.full_name}</option>)}
+          <select
+            required
+            value={ownerId}
+            onChange={e => setOwnerId(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium"
+          >
+            {owners.map(o => <option key={o.id} value={o.id}>{o.full_name}</option>)}
           </select>
         </div>
         <button className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold uppercase tracking-widest text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 active:scale-95 mt-4">
@@ -1199,14 +1398,28 @@ function HorseForm({ onClose }: { onClose: () => void }) {
   );
 }
 
-function JockeyForm({ onClose }: { onClose: () => void }) {
+function UserForm({ onClose, onSubmit }: { onClose: () => void; onSubmit: (data: any) => Promise<void> }) {
+  const [fullName, setFullName] = useState('');
+  const [age, setAge] = useState('');
+  const [license, setLicense] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await onSubmit({
+      full_name: fullName,
+      age: Number(age),
+      license
+    });
+    onClose();
+  };
+
   return (
     <FormLayout title="Новый жокей" onClose={onClose}>
-      <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); onClose(); }}>
-        <InputField label="ФИО Жокея" placeholder="Иван Иванов" />
+      <form className="space-y-6" onSubmit={handleSubmit}>
+        <InputField label="ФИО Жокея" placeholder="Иван Иванов" value={fullName} onChange={e => setFullName(e.target.value)} />
         <div className="grid grid-cols-2 gap-4">
-          <InputField label="Возраст" type="number" placeholder="25" />
-          <InputField label="Лицензия" placeholder="LIC-000" />
+          <InputField label="Возраст" type="number" placeholder="25" value={age} onChange={e => setAge(e.target.value)} />
+          <InputField label="Лицензия" placeholder="LIC-000" value={license} onChange={e => setLicense(e.target.value)} />
         </div>
         <button className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold uppercase tracking-widest text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 active:scale-95 mt-4">
           Добавить в систему
@@ -1216,13 +1429,27 @@ function JockeyForm({ onClose }: { onClose: () => void }) {
   );
 }
 
-function HippodromeForm({ onClose }: { onClose: () => void }) {
+function HippodromeForm({ onClose, onSubmit }: { onClose: () => void; onSubmit: (data: any) => Promise<void> }) {
+  const [name, setName] = useState('');
+  const [city, setCity] = useState('');
+  const [address, setAddress] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await onSubmit({
+      name,
+      city,
+      address
+    });
+    onClose();
+  };
+
   return (
     <FormLayout title="Новый ипподром" onClose={onClose}>
-      <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); onClose(); }}>
-        <InputField label="Название" placeholder="Центральный ипподром" />
-        <InputField label="Город" placeholder="Москва" />
-        <InputField label="Адрес" placeholder="ул. Беговая, 22" />
+      <form className="space-y-6" onSubmit={handleSubmit}>
+        <InputField label="Название" placeholder="Центральный ипподром" value={name} onChange={e => setName(e.target.value)} />
+        <InputField label="Город" placeholder="Москва" value={city} onChange={e => setCity(e.target.value)} />
+        <InputField label="Адрес" placeholder="ул. Беговая, 22" value={address} onChange={e => setAddress(e.target.value)} />
         <button className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold uppercase tracking-widest text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 active:scale-95 mt-4">
           Создать
         </button>
@@ -1231,14 +1458,32 @@ function HippodromeForm({ onClose }: { onClose: () => void }) {
   );
 }
 
-function RegisterEntryForm({ race, onClose }: { race: Race; onClose: () => void }) {
+function RegisterEntryForm({ race, horses, onClose, onSubmit }: { race: Race; horses: Horse[]; onClose: () => void; onSubmit: (data: any) => Promise<void> }) {
+  const [horseId, setHorseId] = useState(horses[0]?.id || '');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await onSubmit({
+      race_id: race.id,
+      horse_id: horseId,
+      user_id: '1', // Default current user
+      place: null
+    });
+    onClose();
+  };
+
   return (
     <FormLayout title={`Участие в: ${race.name}`} onClose={onClose}>
-      <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); onClose(); }}>
+      <form className="space-y-6" onSubmit={handleSubmit}>
         <div className="space-y-1.5">
           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Выберите лошадь</label>
-          <select required className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium">
-            {mockHorses.map(h => <option key={h.id} value={h.id}>{h.nickname} ({h.color})</option>)}
+          <select
+            required
+            value={horseId}
+            onChange={e => setHorseId(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium"
+          >
+            {horses.map(h => <option key={h.id} value={h.id}>{h.nickname} ({h.color})</option>)}
           </select>
         </div>
         <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl">

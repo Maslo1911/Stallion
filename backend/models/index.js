@@ -1,71 +1,107 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
-// ─── Owner ───────────────────────────────────────────────────────────────────
+const Permission = sequelize.define('Permission', {
+    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    name: { type: DataTypes.STRING, allowNull: false, unique: true },
+}, { tableName: 'permission', timestamps: false });
+
+const Role = sequelize.define('Role', {
+    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    name: { type: DataTypes.STRING, allowNull: false, unique: true },
+}, { tableName: 'role', timestamps: false });
+
+const RolePermission = sequelize.define('RolePermission', {
+    role_id: { type: DataTypes.INTEGER },
+    permission_id: { type: DataTypes.INTEGER },
+}, { tableName: 'role_permission', timestamps: false });
+
 const Owner = sequelize.define('Owner', {
     id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-    full_name:     { type: DataTypes.STRING, allowNull: false },
-    phone_number:  { type: DataTypes.STRING },
-    address:       { type: DataTypes.STRING },
+    full_name: { type: DataTypes.STRING, allowNull: false },
+    phone_number: { type: DataTypes.STRING },
+    address: { type: DataTypes.STRING },
 }, { tableName: 'owner', timestamps: false });
 
-// ─── Horse ────────────────────────────────────────────────────────────────────
 const Horse = sequelize.define('Horse', {
-    id:       { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     nickname: { type: DataTypes.STRING, allowNull: false },
-    color:    { type: DataTypes.STRING },
-    age:      { type: DataTypes.INTEGER },
-    owner_id: { type: DataTypes.INTEGER, references: { model: Owner, key: 'id' } },
+    color: { type: DataTypes.STRING },
+    age: { type: DataTypes.INTEGER },
+    owner_id: { type: DataTypes.INTEGER },
 }, { tableName: 'horse', timestamps: false });
 
-// ─── Jockey ───────────────────────────────────────────────────────────────────
-const Jockey = sequelize.define('Jockey', {
-    id:        { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+const User = sequelize.define('User', {
+    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     full_name: { type: DataTypes.STRING, allowNull: false },
-    age:       { type: DataTypes.INTEGER },
-    license:   { type: DataTypes.STRING },
-}, { tableName: 'jokey', timestamps: false });
+    age: { type: DataTypes.INTEGER },
+    license: { type: DataTypes.STRING },
+    role_id: { type: DataTypes.INTEGER },
+    login: { type: DataTypes.STRING(100), unique: true, allowNull: false },
+    password_hash: { type: DataTypes.STRING, allowNull: false },
+}, { tableName: 'user', timestamps: false });
 
-// ─── Hippodrome ───────────────────────────────────────────────────────────────
+const RefreshToken = sequelize.define('RefreshToken', {
+    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    user_id: { type: DataTypes.INTEGER, allowNull: false },
+    token: { type: DataTypes.TEXT, allowNull: false, unique: true },
+    expires_at: { type: DataTypes.DATE, allowNull: false },
+    created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+}, { tableName: 'refresh_token', timestamps: false });
+
 const Hippodrome = sequelize.define('Hippodrome', {
-    id:      { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-    name:    { type: DataTypes.STRING, allowNull: false },
-    city:    { type: DataTypes.STRING },
+    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    name: { type: DataTypes.STRING, allowNull: false },
+    city: { type: DataTypes.STRING },
     address: { type: DataTypes.STRING },
 }, { tableName: 'hippodrome', timestamps: false });
 
-// ─── Race ─────────────────────────────────────────────────────────────────────
 const Race = sequelize.define('Race', {
-    id:             { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-    name:           { type: DataTypes.STRING, allowNull: false },
-    hippodrome_id:  { type: DataTypes.INTEGER, references: { model: Hippodrome, key: 'id' } },
-    date:           { type: DataTypes.DATEONLY },
-    time:           { type: DataTypes.TIME },
-    prize:          { type: DataTypes.DECIMAL(12, 2) },
+    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    name: { type: DataTypes.STRING, allowNull: false },
+    hippodrome_id: { type: DataTypes.INTEGER },
+    date: { type: DataTypes.DATEONLY },
+    time: { type: DataTypes.TIME },
+    prize: { type: DataTypes.DECIMAL(12, 2) },
+    status: { type: DataTypes.STRING, defaultValue: 'planned' },
 }, { tableName: 'race', timestamps: false });
 
-// ─── Participation ────────────────────────────────────────────────────────────
 const Participation = sequelize.define('Participation', {
-    id:        { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-    race_id:   { type: DataTypes.INTEGER, references: { model: Race,   key: 'id' } },
-    horse_id:  { type: DataTypes.INTEGER, references: { model: Horse,  key: 'id' } },
-    jockey_id: { type: DataTypes.INTEGER, references: { model: Jockey, key: 'id' } },
-    place:     { type: DataTypes.INTEGER },
+    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    race_id: { type: DataTypes.INTEGER },
+    horse_id: { type: DataTypes.INTEGER },
+    jockey_id: { type: DataTypes.INTEGER },
+    place: { type: DataTypes.INTEGER },
 }, { tableName: 'participation', timestamps: false });
 
 // ─── Associations ─────────────────────────────────────────────────────────────
-Owner.hasMany(Horse,            { foreignKey: 'owner_id' });
-Horse.belongsTo(Owner,          { foreignKey: 'owner_id' });
+Role.belongsToMany(Permission, { through: RolePermission, foreignKey: 'role_id' });
+Permission.belongsToMany(Role, { through: RolePermission, foreignKey: 'permission_id' });
 
-Hippodrome.hasMany(Race,        { foreignKey: 'hippodrome_id' });
-Race.belongsTo(Hippodrome,      { foreignKey: 'hippodrome_id' });
+User.belongsTo(Role, { foreignKey: 'role_id' });
+Role.hasMany(User, { foreignKey: 'role_id' });
 
-Race.hasMany(Participation,     { foreignKey: 'race_id',   as: 'participations' });
-Horse.hasMany(Participation,    { foreignKey: 'horse_id' });
-Jockey.hasMany(Participation,   { foreignKey: 'jockey_id' });
+User.hasMany(RefreshToken, { foreignKey: 'user_id' });
+RefreshToken.belongsTo(User, { foreignKey: 'user_id' });
 
-Participation.belongsTo(Race,   { foreignKey: 'race_id' });
-Participation.belongsTo(Horse,  { foreignKey: 'horse_id' });
-Participation.belongsTo(Jockey, { foreignKey: 'jockey_id' });
+Owner.hasMany(Horse, { foreignKey: 'owner_id' });
+Horse.belongsTo(Owner, { foreignKey: 'owner_id' });
 
-module.exports = { sequelize, Owner, Horse, Jockey, Hippodrome, Race, Participation };
+Hippodrome.hasMany(Race, { foreignKey: 'hippodrome_id' });
+Race.belongsTo(Hippodrome, { foreignKey: 'hippodrome_id' });
+
+Race.hasMany(Participation, { foreignKey: 'race_id', as: 'participations' });
+Horse.hasMany(Participation, { foreignKey: 'horse_id' });
+User.hasMany(Participation, { foreignKey: 'jockey_id' });
+
+Participation.belongsTo(Race, { foreignKey: 'race_id' });
+Participation.belongsTo(Horse, { foreignKey: 'horse_id' });
+Participation.belongsTo(User, { foreignKey: 'jockey_id', as: 'Jockey' });
+
+module.exports = {
+    sequelize,
+    Permission, Role, RolePermission,
+    Owner, Horse,
+    User, RefreshToken,
+    Hippodrome, Race, Participation,
+};

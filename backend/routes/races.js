@@ -1,5 +1,5 @@
 const { Router } = require('express');
-const { Race, Hippodrome, Participation, Horse, Jockey } = require('../models');
+const { Race, Hippodrome, Participation, Horse, User } = require('../models');
 
 const router = Router();
 
@@ -103,7 +103,7 @@ router.get('/:id/results', async (req, res) => {
             where: { race_id: req.params.id },
             include: [
                 { model: Horse,  attributes: ['id', 'nickname', 'color'] },
-                { model: Jockey, attributes: ['id', 'full_name', 'license'] },
+                { model: User, as: 'Jockey', attributes: ['id', 'full_name', 'license'] },
             ],
             order: [['place', 'ASC']], // сортируем по занятому месту
         });

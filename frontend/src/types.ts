@@ -12,11 +12,13 @@ export interface Owner {
   address: string;
 }
 
-export interface Jockey {
+export interface User {
   id: string;
   full_name: string;
   age: number;
   license: string;
+  role_id: number;
+  login: string;
 }
 
 export interface Horse {
@@ -41,11 +43,11 @@ export interface Participation {
   id: string;
   race_id: string;
   horse_id: string;
-  jockey_id: string;
+  user_id: string;
   place?: number | null;
 }
 
-export type UserRole = 'guest' | 'jockey' | 'admin';
+export type UserRole = 'guest' | 'user' | 'admin';
 
 export interface AppUser {
   email: string;
