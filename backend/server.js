@@ -166,6 +166,4 @@ const seedDatabase = async () => {
         console.error('❌ Не удалось подключиться к БД:', err.message);
         process.exit(1);
     }
-    const valid = await bcrypt.compare('password123', '$2b$10$S0el1lXte1QzvzzFaD2rmO7TB.5KYtfyfhX5PpinaYhUC9XsUpoLW');
-    console.log(valid); // true
 })();

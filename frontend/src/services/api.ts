@@ -28,13 +28,13 @@ function coerceIdsToString<T>(obj: any): T {
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const url = `${API_BASE}${path}`;
-  const token = localStorage.getItem('access_token'); // ← добавить
+  const token = localStorage.getItem('access_token');
 
   const response = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}), // ← добавить
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options?.headers || {}),
     },
   });
@@ -65,15 +65,27 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(credentials),
     });
-    localStorage.setItem('access_token', res.accessToken);
-    localStorage.setItem('refresh_token', res.refreshToken);
+    localStorage.setItem('accessToken', res.accessToken);
+    localStorage.setItem('refreshToken', res.refreshToken);
     return res;
   },
 
-  logout: () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
+  logout: async () => {
+    const refreshToken = localStorage.getItem('refreshToken');
+    if (refreshToken) {
+      try {
+        await request<void>('/auth/logout', {
+          method: 'POST',
+          body: JSON.stringify({ refreshToken }),
+        });
+      } catch {
+        // Logout failed silently — clear tokens anyway
+      }
+    }
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
   },
+
   // ─── HORSES ─────────────────────────────────────────────────────────────────
   getHorses: () => request<Horse[]>('/horses'),
   getHorseById: (id: string | number) => request<Horse>(`/horses/${id}`),
@@ -150,7 +162,7 @@ export const api = {
     method: 'DELETE',
   }),
   getRaceResults: (id: string | number) => request<Participation[]>(`/races/${id}/results`),
-  addRaceResult: (id: string | number, data: { horse_id: string | number; user_id: string | number; place?: number }) => request<Participation>(`/races/${id}/results`, {
+  addRaceResult: (id: string | number, data: { horse_id: string | number; jockey_id: string | number; place?: number }) => request<Participation>(`/races/${id}/results`, {
     method: 'POST',
     body: JSON.stringify(data),
   }),

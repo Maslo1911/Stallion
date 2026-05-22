@@ -17,7 +17,7 @@ export interface User {
   full_name: string;
   age: number;
   license: string;
-  role_id: number;
+  role_id: string;
   login: string;
 }
 
@@ -36,22 +36,15 @@ export interface Race {
   date: string;
   time: string;
   prize: number;
-  status: 'upcoming' | 'ongoing' | 'finished';
+  status: 'planned' | 'ongoing' | 'finished';
 }
 
 export interface Participation {
   id: string;
   race_id: string;
   horse_id: string;
-  user_id: string;
+  jockey_id: string;
   place?: number | null;
 }
 
 export type UserRole = 'guest' | 'user' | 'admin';
-
-export interface AppUser {
-  email: string;
-  password: string;
-  role: UserRole;
-  name: string;
-}

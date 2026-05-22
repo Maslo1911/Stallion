@@ -23,16 +23,51 @@ import {
   Mail,
   Eye,
   EyeOff,
-  ShieldCheck
+  ShieldCheck,
+  Inbox
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserRole, Race, Horse, User, Participation, Owner, Hippodrome } from './types';
-import { cn, formatCurrency } from './lib/utils';
+import { cn, formatCurrency, decodeJwtPayload } from './lib/utils';
 import { api } from './services/api';
 
+// ─── Loading Skeleton Component ────────────────────────────────────────────────
+function SkeletonCard() {
+  return (
+    <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm animate-pulse">
+      <div className="flex items-start justify-between mb-4">
+        <div className="space-y-3 flex-1">
+          <div className="h-4 bg-slate-200 rounded w-24" />
+          <div className="h-6 bg-slate-200 rounded w-3/4" />
+          <div className="h-4 bg-slate-200 rounded w-1/2" />
+        </div>
+        <div className="w-10 h-10 bg-slate-200 rounded-full" />
+      </div>
+      <div className="flex gap-8 mt-4">
+        <div className="h-5 bg-slate-200 rounded w-20" />
+        <div className="h-5 bg-slate-200 rounded w-16" />
+      </div>
+    </div>
+  );
+}
 
+function EmptyState({ icon: Icon, title, description }: { icon: any; title: string; description: string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex flex-col items-center justify-center py-20 text-center w-full"
+    >
+      <div className="w-20 h-20 rounded-2xl bg-slate-100 flex items-center justify-center mb-6">
+        <Icon className="w-10 h-10 text-slate-300" />
+      </div>
+      <h3 className="text-lg font-bold text-slate-900 mb-2">{title}</h3>
+      <p className="text-sm text-slate-500 max-w-sm">{description}</p>
+    </motion.div>
+  );
+}
 
-function LoginPage({ onLogin, onClose }: { onLogin: (role: UserRole) => void; onClose: () => void }) {
+function LoginPage({ onLogin, onClose }: { onLogin: (role: UserRole, authUser: User) => void; onClose: () => void }) {
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -44,20 +79,19 @@ function LoginPage({ onLogin, onClose }: { onLogin: (role: UserRole) => void; on
     setLoading(true);
     setError(false);
     try {
-      const { accessToken, refreshToken } = await api.login({ login, password });
-      localStorage.setItem('accessToken', accessToken);
-      localStorage.setItem('refreshToken', refreshToken);
+      const { accessToken } = await api.login({ login, password });
 
-      const users: User[] = await api.getUsers();
-      const user = users.find(u => u.login === login);
-      if (user) {
-        if (user.role_id === '2') {
-          onLogin('user');
-        } else if (user.role_id === '1') {
-          onLogin('admin');
+      const payload = decodeJwtPayload(accessToken);
+      if (payload) {
+        const authUser: User = {
+          ...(await api.getUserById(payload.id))
+        };
+        if (payload.role_id === 2 || payload.role === 'jockey') {
+          onLogin('user', authUser);
+        } else if (payload.role_id === 1 || payload.role === 'admin') {
+          onLogin('admin', authUser);
         } else {
-          console.log('User role unknown, defaulting to guest');
-          onLogin('guest');
+          onLogin('guest', authUser);
         }
       } else {
         setError(true);
@@ -146,7 +180,7 @@ function LoginPage({ onLogin, onClose }: { onLogin: (role: UserRole) => void; on
                 animate={{ opacity: 1, x: 0 }}
                 className="text-xs text-rose-500 font-bold text-center"
               >
-                Неверный email или пароль
+                Неверный логин или пароль
               </motion.p>
             )}
 
@@ -174,6 +208,7 @@ function LoginPage({ onLogin, onClose }: { onLogin: (role: UserRole) => void; on
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [role, setRole] = useState<UserRole>('guest');
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<'races' | 'horses' | 'users' | 'history' | 'admin' | 'analytics'>('races');
   const [searchQuery, setSearchQuery] = useState('');
   const [dateFilter, setDateFilter] = useState('');
@@ -216,7 +251,44 @@ export default function App() {
   };
 
   useEffect(() => {
-    loadAllData();
+    const initializeAuthAndData = async () => {
+      try {
+        setDbLoading(true);
+
+        // Проверяем, есть ли сохраненный токен (замените 'accessToken' на ваш ключ, если он другой)
+        const token = localStorage.getItem('accessToken');
+
+        if (token) {
+          const payload = decodeJwtPayload(token);
+          if (payload) {
+            // Восстанавливаем роль на основе данных из JWT токена
+            if (payload.role_id === 2 || payload.role === 'jockey') {
+              setRole('user');
+              setActiveTab('history'); // открываем вкладку жокея
+            } else if (payload.role_id === 1 || payload.role === 'admin') {
+              setRole('admin');
+              setActiveTab('admin');   // открываем вкладку админа
+            } else {
+              setRole('guest');
+            }
+            setIsLoggedIn(true);
+            setCurrentUser((await api.getUserById(payload.id)) as any);
+          }
+        } else {
+          // Если access-токена нет, но у вас реализован refresh-токен,
+          // здесь можно вызвать метод обновления, например:
+          // const newTokens = await api.refreshToken();
+          // и повторить логику авторизации...
+        }
+      } catch (err) {
+        console.error('Ошибка при восстановлении сессии:', err);
+      } finally {
+        // После проверки авторизации загружаем остальные данные
+        await loadAllData();
+      }
+    };
+
+    initializeAuthAndData();
   }, []);
 
   const handleCreateRace = async (data: Omit<Race, 'id' | 'status'>) => {
@@ -259,13 +331,13 @@ export default function App() {
     }
   };
 
-  const handleRegisterParticipation = async (horseId: string) => {
+  const handleRegisterParticipation = async (formData: { horse_id: string }) => {
     if (!selectedRace) return;
     try {
       const newPart = await api.createParticipation({
         race_id: selectedRace.id,
-        horse_id: horseId,
-        user_id: "1", // Фрэнки Деттори
+        horse_id: formData.horse_id,
+        jockey_id: currentUser?.id || "1",
       });
       setParticipations(prev => [...prev, newPart]);
       setShowModal(null);
@@ -275,7 +347,6 @@ export default function App() {
   };
 
   const analytics = useMemo(() => {
-    // 4. Horse with most prize places
     const horsePrizeCount: Record<string, number> = {};
     participations.forEach(p => {
       if (p.place && p.place <= 3) {
@@ -285,17 +356,15 @@ export default function App() {
     const topHorseId = Object.entries(horsePrizeCount).sort((a, b) => b[1] - a[1])[0]?.[0];
     const topHorse = horses.find(h => h.id === topHorseId);
 
-    // 5. User with most prize places
     const userPrizeCount: Record<string, number> = {};
     participations.forEach(p => {
       if (p.place && p.place <= 3) {
-        userPrizeCount[p.user_id] = (userPrizeCount[p.user_id] || 0) + 1;
+        userPrizeCount[p.jockey_id] = (userPrizeCount[p.jockey_id] || 0) + 1;
       }
     });
-    const topUserId = Object.entries(userPrizeCount).sort((a, b) => b[1] - a[1])[0]?.[0];
-    const topUser = users.find(j => j.id === topUserId);
+    const topJockeyId = Object.entries(userPrizeCount).sort((a, b) => b[1] - a[1])[0]?.[0];
+    const topJockey = users.find(j => j.id === topJockeyId);
 
-    // 6. Most frequent hippodrome
     const hippodromeCount: Record<string, number> = {};
     races.forEach(r => {
       hippodromeCount[r.hippodrome_id] = (hippodromeCount[r.hippodrome_id] || 0) + 1;
@@ -303,25 +372,26 @@ export default function App() {
     const topHippodromeId = Object.entries(hippodromeCount).sort((a, b) => b[1] - a[1])[0]?.[0];
     const topHippodrome = hippodromes.find(h => h.id === topHippodromeId);
 
-    // 1. Winners on a given date (using dateFilter)
     const prizeWinnersOnDate = dateFilter ? participations.filter(p => {
       const race = races.find(r => r.id === p.race_id);
       return race?.date === dateFilter && p.place && p.place <= 3;
     }).map(p => ({
       horse: horses.find(h => h.id === p.horse_id),
-      user: users.find(j => j.id === p.user_id),
+      user: users.find(j => j.id === p.jockey_id),
       place: p.place
     })) : [];
 
-    return { topHorse, topUser, topHippodrome, prizeWinnersOnDate };
+    return { topHorse, topJockey, topHippodrome, prizeWinnersOnDate };
   }, [dateFilter, races, horses, users, hippodromes, participations]);
 
   const filteredRaces = useMemo(() => {
-    return races.filter(r => {
-      const matchesSearch = r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        hippodromes.find(h => h.id === r.hippodrome_id)?.name.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesSearch;
-    });
+    return races
+      .filter(r => {
+        const matchesSearch = r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          hippodromes.find(h => h.id === r.hippodrome_id)?.name.toLowerCase().includes(searchQuery.toLowerCase());
+        return matchesSearch;
+      })
+      .sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`));
   }, [searchQuery, races, hippodromes]);
 
   const filteredHorses = useMemo(() => {
@@ -333,17 +403,19 @@ export default function App() {
 
   const filteredUsers = useMemo(() => {
     return users.filter(j =>
-      j.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      j.license.toLowerCase().includes(searchQuery.toLowerCase())
+      j.full_name.toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [searchQuery, users]);
 
   const stats = useMemo(() => {
     const totalPrize = races.reduce((sum, r) => sum + Number(r.prize || 0), 0);
-    const upcomingRaces = races.filter(r => r.status === 'upcoming');
-    const nextTime = upcomingRaces[0]?.time ? upcomingRaces[0].time.substring(0, 5) : '15:40';
+    const upcomingRaces = races
+      .filter(r => r.status === 'upcoming' || r.status === 'planned')
+      .sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`));
+    const nextTime = upcomingRaces[0]?.time ? upcomingRaces[0].time.substring(0, 5) : '';
+    const nextDate = upcomingRaces[0]?.date ? upcomingRaces[0].date : '';
     return [
-      { label: 'Следующая скачка', value: nextTime, icon: Clock, color: 'text-blue-500' },
+      { label: 'Следующая скачка', value: `${nextDate} в ${nextTime}`, icon: Clock, color: 'text-blue-500' },
       { label: 'Общий призовой фонд', value: formatCurrency(totalPrize || 15000000), icon: TrendingUp, color: 'text-emerald-500' },
       { label: 'Зарегистрировано лошадей', value: String(horses.length || 0), icon: Award, color: 'text-amber-500' },
     ];
@@ -409,15 +481,15 @@ export default function App() {
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 hidden md:block">
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-xs font-bold text-white">
-                  {role === 'user' ? 'Ж' : 'А'}
+                  {role === 'admin' ? 'А' : 'Ж'}
                 </div>
                 <div className="overflow-hidden">
-                  <p className="text-sm font-semibold text-slate-900 truncate capitalize">{role === 'user' ? 'жокей' : 'админ'}</p>
+                  <p className="text-sm font-semibold text-slate-900 truncate capitalize">{currentUser?.login || role}</p>
                   <p className="text-xs text-slate-500 truncate">В сети</p>
                 </div>
               </div>
               <button
-                onClick={() => { setIsLoggedIn(false); setRole('guest'); setActiveTab('races'); }}
+                onClick={() => { setIsLoggedIn(false); setRole('guest'); setCurrentUser(null); setActiveTab('races'); }}
                 className="w-full py-2 bg-white border border-slate-200 hover:bg-slate-50 transition-colors rounded-lg text-xs font-medium flex items-center justify-center gap-2 text-slate-600"
               >
                 <LogOut className="w-3 h-3" /> Выйти
@@ -431,8 +503,6 @@ export default function App() {
               <UserIcon className="w-4 h-4" /> Войти в аккаунт
             </button>
           )}
-
-          {/* Role Switcher Demo Removed */}
         </div>
       </aside>
 
@@ -555,6 +625,13 @@ export default function App() {
                   owners={owners}
                   hippodromes={hippodromes}
                 />
+              ) : dbLoading ? (
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  <SkeletonCard />
+                  <SkeletonCard />
+                </div>
+              ) : filteredRaces.length === 0 ? (
+                <EmptyState icon={Inbox} title="Скачки не найдены" description="По вашему запросу ничего не найдено." />
               ) : (
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                   {filteredRaces.map((race) => (
@@ -563,6 +640,7 @@ export default function App() {
                       race={race}
                       onClick={() => setSelectedRace(race)}
                       hippodrome={hippodromes.find(h => h.id === race.hippodrome_id)}
+                      participantCount={participations.filter(p => p.race_id === race.id).length}
                     />
                   ))}
                 </div>
@@ -586,6 +664,14 @@ export default function App() {
                   races={races}
                   hippodromes={hippodromes}
                 />
+              ) : dbLoading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <SkeletonCard />
+                  <SkeletonCard />
+                  <SkeletonCard />
+                </div>
+              ) : filteredHorses.length === 0 ? (
+                <EmptyState icon={Inbox} title="Лошади не найдены" description="Попробуйте изменить поисковый запрос." />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {filteredHorses.map(horse => (
@@ -612,11 +698,18 @@ export default function App() {
               {selectedUser ? (
                 <HistoryView
                   title={`История жокея: ${selectedUser.full_name}`}
-                  participations={participations.filter(p => p.user_id === selectedUser.id)}
+                  participations={participations.filter(p => p.jockey_id === selectedUser.id)}
                   onBack={() => setSelectedUser(null)}
                   races={races}
                   hippodromes={hippodromes}
                 />
+              ) : dbLoading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <SkeletonCard />
+                  <SkeletonCard />
+                </div>
+              ) : filteredUsers.length === 0 ? (
+                <EmptyState icon={Users} title="Жокеи не найдены" description="Зарегистрируйте нового жокея в админ-панели." />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {filteredUsers.map(user => (
@@ -648,7 +741,7 @@ export default function App() {
                 />
                 <AnalyticsTopCard
                   label="Топ жокей"
-                  value={analytics.topUser?.full_name || '-'}
+                  value={analytics.topJockey?.full_name || '-'}
                   subtext="Больше всего призовых мест"
                   icon={Users}
                 />
@@ -708,25 +801,25 @@ export default function App() {
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Всего скачек</p>
-                  <p className="text-3xl font-bold text-slate-900">{participations.filter(p => p.user_id === '1').length}</p>
+                  <p className="text-3xl font-bold text-slate-900">{participations.filter(p => p.jockey_id === (currentUser?.id || '1')).length}</p>
                 </div>
                 <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Процент побед</p>
                   <p className="text-3xl font-bold text-emerald-600">
-                    {Math.round((participations.filter(p => p.user_id === '1' && p.place === 1).length /
-                      (participations.filter(p => p.user_id === '1').length || 1)) * 100)}%
+                    {Math.round((participations.filter(p => p.jockey_id === (currentUser?.id || '1') && p.place === 1).length /
+                      (participations.filter(p => p.jockey_id === (currentUser?.id || '1')).length || 1)) * 100)}%
                   </p>
                 </div>
                 <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Подиумы</p>
-                  <p className="text-3xl font-bold text-slate-900">{participations.filter(p => p.user_id === '1' && p.place && p.place <= 3).length}</p>
+                  <p className="text-3xl font-bold text-slate-900">{participations.filter(p => p.jockey_id === (currentUser?.id || '1') && p.place && p.place <= 3).length}</p>
                 </div>
                 <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Доход жокея</p>
                   <p className="text-3xl font-bold text-blue-600">
                     {formatCurrency(
                       participations
-                        .filter(p => p.user_id === '1' && p.place)
+                        .filter(p => p.jockey_id === (currentUser?.id || '1') && p.place)
                         .reduce((sum, p) => {
                           const race = races.find(r => r.id === p.race_id);
                           const share = p.place === 1 ? 0.1 : 0.05;
@@ -742,7 +835,7 @@ export default function App() {
                   <h3 className="text-lg font-bold text-slate-900 tracking-tight">Последние результаты</h3>
                 </div>
                 <div className="divide-y divide-slate-100">
-                  {participations.filter(p => p.user_id === '1' && p.place).map(p => {
+                  {participations.filter(p => p.jockey_id === (currentUser?.id || '1') && p.place).map(p => {
                     const race = races.find(r => r.id === p.race_id);
                     const horse = horses.find(h => h.id === p.horse_id);
                     return (
@@ -781,26 +874,6 @@ export default function App() {
               className="space-y-8"
             >
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <AdminCard title="Недавняя активность" description="Отслеживание изменений в системе">
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                      <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600"><Plus className="w-5 h-5" /></div>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">База данных успешно подключена</p>
-                        <p className="text-xs text-slate-500 font-medium">Только что • PostgreSQL</p>
-                      </div>
-                    </div>
-                    {races.slice(0, 2).map(r => (
-                      <div key={r.id} className="flex items-center gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                        <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600"><Plus className="w-5 h-5" /></div>
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">Скачка "{r.name}" в списке</p>
-                          <p className="text-xs text-slate-500 font-medium">{r.date} в {r.time}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </AdminCard>
                 <AdminCard title="Быстрые действия" description="Управление треком">
                   <div className="grid grid-cols-2 gap-4">
                     <ActionButton icon={Plus} label="Новая скачка" onClick={() => setShowModal('race')} />
@@ -853,8 +926,21 @@ export default function App() {
                           <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest">Лицензия: {j.license}</p>
                         </div>
                         <div className="flex gap-2">
-                          <button className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-bold uppercase hover:bg-slate-100 transition-colors">Продлить</button>
-                          <button className="px-3 py-1 bg-rose-50 text-rose-600 border border-rose-100 rounded-lg text-[10px] font-bold uppercase hover:bg-rose-100 transition-colors">Отстранить</button>
+                          <button
+                            onClick={async () => {
+                              if (confirm(`Вы уверены, что хотите отстранить жокея ${j.full_name} и удалить его из системы?`)) {
+                                try {
+                                  await api.deleteUser(j.id);
+                                  setUsers(prev => prev.filter(u => u.id !== j.id));
+                                } catch (err: any) {
+                                  alert(`Ошибка при отстранении жокея: ${err.message}`);
+                                }
+                              }
+                            }}
+                            className="px-3 py-1 bg-rose-50 text-rose-600 border border-rose-100 rounded-lg text-[10px] font-bold uppercase hover:bg-rose-100 transition-colors"
+                          >
+                            Отстранить
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -878,13 +964,6 @@ export default function App() {
                     </div>
                   </div>
                 </AdminCard>
-                <AdminCard title="Системное" description="Конфигурация параметров">
-                  <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl">
-                    <p className="text-xs text-blue-700 font-medium leading-relaxed">
-                      Все действия логируются. Изменения вступают в силу мгновенно для всех пользователей системы.
-                    </p>
-                  </div>
-                </AdminCard>
               </div>
             </motion.section>
           )}
@@ -896,8 +975,9 @@ export default function App() {
             <Modal onClose={() => setShowModal(null)}>
               {showModal === 'login' && (
                 <LoginPage
-                  onLogin={(selectedRole) => {
+                  onLogin={(selectedRole, authUser) => {
                     setRole(selectedRole);
+                    setCurrentUser(authUser);
                     setIsLoggedIn(true);
                     setShowModal(null);
                     if (selectedRole === 'admin') setActiveTab('admin');
@@ -934,12 +1014,13 @@ function NavItem({ active, onClick, icon: Icon, label }: { active: boolean; onCl
   );
 }
 
-function RaceListItem({ race, hippodrome, onClick }: { race: Race; hippodrome?: any; onClick: () => void; key?: string | number }) {
+function RaceListItem({ race, hippodrome, participantCount, onClick }: { race: Race; hippodrome?: any; participantCount: number; onClick: () => void }) {
   const statusColor = {
     upcoming: 'bg-blue-50 text-blue-700 border-blue-100',
+    planned: 'bg-blue-50 text-blue-700 border-blue-100',
     ongoing: 'bg-emerald-50 text-emerald-700 border-emerald-100',
     finished: 'bg-slate-50 text-slate-600 border-slate-100'
-  }[race.status];
+  }[race.status] || 'bg-slate-50 text-slate-600 border-slate-100';
 
   return (
     <div
@@ -950,7 +1031,7 @@ function RaceListItem({ race, hippodrome, onClick }: { race: Race; hippodrome?: 
         <div className="space-y-4">
           <div className="flex items-center gap-3">
             <span className={cn("px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border", statusColor)}>
-              {race.status === 'upcoming' ? 'ожидается' : race.status === 'ongoing' ? 'идет' : 'завершено'}
+              {race.status === 'planned' ? 'ожидается' : race.status === 'ongoing' ? 'идет' : 'завершено'}
             </span>
             <span className="text-slate-400 text-xs flex items-center gap-1">
               <Calendar className="w-3.5 h-3.5" /> {race.date}
@@ -975,7 +1056,7 @@ function RaceListItem({ race, hippodrome, onClick }: { race: Race; hippodrome?: 
             <div className="h-8 w-px bg-slate-100" />
             <div>
               <p className="text-[10px] uppercase font-bold text-slate-400 mb-0.5 tracking-wider">Участники</p>
-              <p className="text-lg font-bold text-slate-900">12 / 20</p>
+              <p className="text-lg font-bold text-slate-900">{participantCount}</p>
             </div>
           </div>
         </div>
@@ -998,7 +1079,6 @@ function RaceDetailView({ race, onBack, role, onRegister, participations: allPar
       </button>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Race Info */}
         <div className="lg:col-span-12 space-y-8">
           <div className="p-8 bg-white rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
             <div className="relative z-10 space-y-6">
@@ -1031,7 +1111,7 @@ function RaceDetailView({ race, onBack, role, onRegister, participations: allPar
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold text-slate-900">Подтвержденные участники</h3>
-              {role === 'user' && race.status === 'upcoming' && (
+              {role === 'user' && race.status === 'planned' && (
                 <button
                   onClick={() => onRegister?.()}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl text-sm font-bold transition-all shadow-sm"
@@ -1039,20 +1119,12 @@ function RaceDetailView({ race, onBack, role, onRegister, participations: allPar
                   Зарегистрироваться
                 </button>
               )}
-              {role === 'admin' && (
-                <button
-                  onClick={() => alert('Режим редактирования активирован (демо)')}
-                  className="bg-amber-600 hover:bg-amber-700 text-white px-5 py-2 rounded-xl text-sm font-bold transition-all shadow-sm"
-                >
-                  Редактировать
-                </button>
-              )}
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-bottom border-slate-100 bg-slate-50">
+                  <tr className="border-b border-slate-100 bg-slate-50">
                     {race.status === 'finished' && <th className="p-4 text-[10px] uppercase font-bold text-slate-500 tracking-widest">Место</th>}
                     <th className="p-4 text-[10px] uppercase font-bold text-slate-500 tracking-widest">Лошадь</th>
                     <th className="p-4 text-[10px] uppercase font-bold text-slate-500 tracking-widest">Жокей</th>
@@ -1062,11 +1134,10 @@ function RaceDetailView({ race, onBack, role, onRegister, participations: allPar
                 <tbody className="divide-y divide-slate-100">
                   {participations
                     .sort((a, b) => (a.place || 99) - (b.place || 99))
-                    .map((p, idx) => {
+                    .map((p) => {
                       const horse = horses.find(h => h.id === p.horse_id);
-                      const user = users.find(j => j.id === p.user_id);
+                      const user = users.find(j => j.id === p.jockey_id);
                       const owner = owners.find(o => o.id === horse?.owner_id);
-                      const isPodium = p.place && p.place <= 3;
 
                       return (
                         <tr key={p.id} className="hover:bg-slate-50/50 transition-colors group">
@@ -1089,7 +1160,7 @@ function RaceDetailView({ race, onBack, role, onRegister, participations: allPar
                           <td className="p-4 text-sm text-slate-600 font-medium">{user?.full_name}</td>
                           <td className="p-4 text-sm text-slate-500 text-right">{owner?.full_name}</td>
                         </tr>
-                      )
+                      );
                     })}
                 </tbody>
               </table>
@@ -1101,7 +1172,7 @@ function RaceDetailView({ race, onBack, role, onRegister, participations: allPar
   );
 }
 
-function HorseCard({ horse, owner, onClick }: { horse: Horse; owner?: any; onClick?: () => void; key?: string | number }) {
+function HorseCard({ horse, owner, onClick }: { horse: Horse; owner?: any; onClick?: () => void }) {
   return (
     <div
       onClick={onClick}
@@ -1133,7 +1204,8 @@ function HorseCard({ horse, owner, onClick }: { horse: Horse; owner?: any; onCli
   );
 }
 
-function UserCard({ user, onClick }: { user: User; onClick?: () => void; key?: string | number }) {
+// Полноценный запуск без лишних скобок на конце!
+function UserCard({ user, onClick }: { user: User; onClick?: () => void }) {
   return (
     <div
       onClick={onClick}
@@ -1211,6 +1283,7 @@ function HistoryView({ title, participations, onBack, races, hippodromes }: { ti
   );
 }
 
+// Вспомогательные карточки и модалки
 function AnalyticsTopCard({ label, value, subtext, icon: Icon }: { label: string; value: string; subtext: string; icon: any }) {
   return (
     <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm relative overflow-hidden group">
@@ -1464,10 +1537,7 @@ function RegisterEntryForm({ race, horses, onClose, onSubmit }: { race: Race; ho
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await onSubmit({
-      race_id: race.id,
       horse_id: horseId,
-      user_id: '1', // Default current user
-      place: null
     });
     onClose();
   };
