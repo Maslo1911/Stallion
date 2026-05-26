@@ -63,8 +63,8 @@ router.put('/:id', async (req, res) => {
             return res.status(404).json({ error: 'Скачка не найдена' });
         }
 
-        const { name, hippodrome_id, date, time, prize } = req.body;
-        await race.update({ name, hippodrome_id, date, time, prize });
+        const { name, hippodrome_id, date, time, prize, status } = req.body;
+        await race.update({ name, hippodrome_id, date, time, prize, status });
 
         res.json(race);
     } catch (err) {
@@ -102,7 +102,7 @@ router.get('/:id/results', async (req, res) => {
         const results = await Participation.findAll({
             where: { race_id: req.params.id },
             include: [
-                { model: Horse,  attributes: ['id', 'nickname', 'color'] },
+                { model: Horse, attributes: ['id', 'nickname', 'color'] },
                 { model: User, as: 'Jockey', attributes: ['id', 'full_name', 'license'] },
             ],
             order: [['place', 'ASC']], // сортируем по занятому месту
