@@ -28,7 +28,7 @@ function coerceIdsToString<T>(obj: any): T {
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const url = `${API_BASE}${path}`;
-  const token = localStorage.getItem('access_token');
+  const token = localStorage.getItem('accessToken');
 
   const response = await fetch(url, {
     ...options,
@@ -84,6 +84,18 @@ export const api = {
     }
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+  },
+
+  refresh: async () => {
+    const refreshToken = localStorage.getItem('refreshToken');
+    if (!refreshToken) throw new Error('No refresh token available');
+    const res = await request<{ accessToken: string; refreshToken: string }>('/auth/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ refreshToken }),
+    });
+    localStorage.setItem('accessToken', res.accessToken);
+    localStorage.setItem('refreshToken', res.refreshToken);
+    return res.accessToken;
   },
 
   // ─── HORSES ─────────────────────────────────────────────────────────────────

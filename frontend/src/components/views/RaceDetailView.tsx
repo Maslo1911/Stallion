@@ -9,6 +9,7 @@ interface RaceDetailViewProps {
   role: UserRole;
   onRegister?: () => void;
   onEdit?: () => void;
+  onDeleteRace?: (id: string) => Promise<void>;
   onUpdateParticipantPlace?: (id: string, place: number | null) => Promise<void>;
   onDeleteParticipant?: (id: string) => Promise<void>;
   participations: Participation[];
@@ -24,6 +25,7 @@ export function RaceDetailView({
   role,
   onRegister,
   onEdit,
+  onDeleteRace,
   onUpdateParticipantPlace,
   onDeleteParticipant,
   participations: allParticipations,
@@ -50,12 +52,24 @@ export function RaceDetailView({
                   <span className="text-slate-500 text-sm font-medium">{race.date} • {race.time}</span>
                 </div>
                 {role === 'admin' && (
-                  <button
-                    onClick={onEdit}
-                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs font-bold transition-all uppercase tracking-wider shadow-sm border border-slate-200"
-                  >
-                    Редактировать
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={onEdit}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs font-bold transition-all uppercase tracking-wider shadow-sm border border-slate-200"
+                    >
+                      Редактировать
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (confirm(`Вы уверены, что хотите удалить скачку "${race.name}"?`)) {
+                          await onDeleteRace?.(race.id);
+                        }
+                      }}
+                      className="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-100 px-4 py-2 rounded-xl text-xs font-bold transition-all uppercase tracking-wider shadow-sm"
+                    >
+                      Удалить
+                    </button>
+                  </div>
                 )}
               </div>
               <h2 className="text-4xl md:text-5xl font-bold text-slate-900 tracking-tight font-display">{race.name}</h2>

@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const { Race, Hippodrome, Participation, Horse, User } = require('../models');
+const { authenticate, requireRole } = require('../middleware/auth');
 
 const router = Router();
 
@@ -37,7 +38,7 @@ router.get('/:id', async (req, res) => {
 // ─── POST /api/races ──────────────────────────────────────────────────────────
 // Добавить скачку
 // Body: { name, hippodrome_id, date, time, prize }
-router.post('/', async (req, res) => {
+router.post('/', authenticate, requireRole('admin'), async (req, res) => {
     try {
         const { name, hippodrome_id, date, time, prize } = req.body;
 
@@ -45,7 +46,16 @@ router.post('/', async (req, res) => {
             return res.status(400).json({ error: 'Поля name, hippodrome_id и date обязательны' });
         }
 
-        const race = await Race.create({ name, hippodrome_id, date, time, prize });
+        // Автоматически определяем статус на основе времени
+        let status = 'planned';
+        if (date) {
+            const raceDateTime = new Date(`${date}T${time || '00:00'}`);
+            if (!isNaN(raceDateTime.getTime())) {
+                status = raceDateTime < new Date() ? 'finished' : 'planned';
+            }
+        }
+
+        const race = await Race.create({ name, hippodrome_id, date, time, prize, status });
         res.status(201).json(race);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -55,7 +65,7 @@ router.post('/', async (req, res) => {
 // ─── PUT /api/races/:id ───────────────────────────────────────────────────────
 // Обновить данные скачки
 // Body: { name?, hippodrome_id?, date?, time?, prize? }
-router.put('/:id', async (req, res) => {
+router.put('/:id', authenticate, requireRole('admin'), async (req, res) => {
     try {
         const race = await Race.findByPk(req.params.id);
 
@@ -74,7 +84,7 @@ router.put('/:id', async (req, res) => {
 
 // ─── DELETE /api/races/:id ────────────────────────────────────────────────────
 // Удалить скачку по идентификатору
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authenticate, requireRole('admin'), async (req, res) => {
     try {
         const race = await Race.findByPk(req.params.id);
 

@@ -103,22 +103,75 @@ export default function App() {
     const initializeAuthAndData = async () => {
       try {
         setDbLoading(true);
-        const token = localStorage.getItem('accessToken');
+        let token = localStorage.getItem('accessToken');
 
         if (token) {
           const payload = decodeJwtPayload(token);
           if (payload) {
-            if (payload.role_id === 2 || payload.role === 'jockey') {
-              setRole('user');
-              setActiveTab('history');
-            } else if (payload.role_id === 1 || payload.role === 'admin') {
-              setRole('admin');
-              setActiveTab('admin');
-            } else {
-              setRole('guest');
+            const isExpired = payload.exp ? Date.now() >= payload.exp * 1000 : true;
+            if (isExpired) {
+              try {
+                token = await api.refresh();
+              } catch (refreshErr) {
+                console.error('Failed to refresh expired token:', refreshErr);
+                await api.logout();
+                token = null;
+              }
             }
-            setIsLoggedIn(true);
-            setCurrentUser((await api.getUserById(payload.id)) as any);
+          } else {
+            token = null;
+          }
+        } else {
+          // No access token, check for refresh token
+          const refreshToken = localStorage.getItem('refreshToken');
+          if (refreshToken) {
+            try {
+              token = await api.refresh();
+            } catch (refreshErr) {
+              console.error('Failed to initialize session with refresh token:', refreshErr);
+              await api.logout();
+              token = null;
+            }
+          }
+        }
+
+        if (token) {
+          let payload = decodeJwtPayload(token);
+          if (payload) {
+            let userLoaded = false;
+            try {
+              const user = await api.getUserById(payload.id);
+              setCurrentUser(user as any);
+              userLoaded = true;
+            } catch (err) {
+              console.warn('Failed to load user with current access token, trying refresh...', err);
+              try {
+                token = await api.refresh();
+                payload = decodeJwtPayload(token);
+                if (payload) {
+                  const user = await api.getUserById(payload.id);
+                  setCurrentUser(user as any);
+                  userLoaded = true;
+                }
+              } catch (refreshErr) {
+                console.error('Final session recovery attempt failed:', refreshErr);
+                await api.logout();
+                token = null;
+              }
+            }
+
+            if (userLoaded && token && payload) {
+              if (payload.role_id === 2 || payload.role === 'jockey') {
+                setRole('user');
+                setActiveTab('history');
+              } else if (payload.role_id === 1 || payload.role === 'admin') {
+                setRole('admin');
+                setActiveTab('admin');
+              } else {
+                setRole('guest');
+              }
+              setIsLoggedIn(true);
+            }
           }
         }
       } catch (err) {
@@ -150,6 +203,16 @@ export default function App() {
       setShowModal(null);
     } catch (err: any) {
       alert(`Ошибка при обновлении скачки: ${err.message}`);
+    }
+  };
+
+  const handleDeleteRace = async (id: string) => {
+    try {
+      await api.deleteRace(id);
+      setRaces(prev => prev.filter(r => r.id !== id));
+      setSelectedRace(null);
+    } catch (err: any) {
+      alert(`Ошибка при удалении скачки: ${err.message}`);
     }
   };
 
@@ -260,7 +323,8 @@ export default function App() {
     }).map(p => ({
       horse: horses.find(h => h.id === p.horse_id),
       user: users.find(j => j.id === p.jockey_id),
-      place: p.place
+      place: p.place,
+      race_name: races.find(r => r.id === p.race_id)?.name
     })) : [];
 
     return { topHorse, topJockey, topHippodrome, prizeWinnersOnDate };
@@ -503,6 +567,7 @@ export default function App() {
                   role={role}
                   onRegister={() => setShowModal('register')}
                   onEdit={() => setShowModal('race')}
+                  onDeleteRace={handleDeleteRace}
                   onUpdateParticipantPlace={handleUpdateParticipantPlace}
                   onDeleteParticipant={handleDeleteParticipant}
                   participations={participations}

@@ -14,6 +14,7 @@ interface AnalyticsViewProps {
       horse?: Horse;
       user?: User;
       place?: number | null;
+      race_name?: string;
     }>;
   };
   dateFilter: string;
@@ -72,6 +73,7 @@ export function AnalyticsView({ analytics, dateFilter }: AnalyticsViewProps) {
                   <div>
                     <p className="text-sm font-bold text-slate-900">{winner.horse?.nickname}</p>
                     <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Жокей: {winner.user?.full_name}</p>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Скачка: {winner.race_name}</p>
                   </div>
                 </div>
               </div>
